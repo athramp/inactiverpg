@@ -5455,7 +5455,7 @@ MonoBehaviour:
   playerAttackRange: {fileID: 1364499296}
   enemySpawnPoint: {fileID: 777667050}
   engagePoint: {fileID: 268247861}
-  enemyPrefab: {fileID: 7165065568128235175, guid: 533fef513f957924e87c38e9bf59f838, type: 3}
+  enemyPrefab: {fileID: 6168584582341366656, guid: 8a99df243bdb2af49ba1dfd0b0f8f16d, type: 3}
   enemyMoveSpeed: 2.5
   playerAttackRate: 1
   enemyAttackRate: 1.2

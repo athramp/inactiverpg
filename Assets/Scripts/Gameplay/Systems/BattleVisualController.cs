@@ -2,7 +2,7 @@
 using System.Collections;
 using UnityEngine;
 
-public class BattleVisualController : MonoBehaviour
+public partial class BattleVisualController : MonoBehaviour
 {
     [Header("Scene Refs")]
     public GameLoopService game;         // drag your GameRoot (GameLoopService) here
@@ -14,7 +14,18 @@ public class BattleVisualController : MonoBehaviour
     public Collider2D playerAttackRange;  // Soldier’s (trigger) attack radius (optional but useful)
 
     [Header("Enemy")]
-    public Transform enemySpawnPoint;    // offscreen/right
+    [SerializeField] private GameObject[] enemyPrefabs;   // Drag Orc, Skeleton, etc. here
+    [SerializeField] private Transform enemySpawnPoint;   // Where enemies instantiate
+[SerializeField] private Transform enemyParent;       // Optional: parent in hierarchy
+    // == Optional boss cadence ==
+[SerializeField] private int bossEvery = 10;          // Every N kills becomes a boss
+[SerializeField] private float bossScale = 1.25f;
+[SerializeField] private Color bossTint = Color.red;
+        private int _killCount;
+    private GameObject _currentEnemy;
+    private SpriteRenderer _currentEnemySR; // cache for tinting
+    private Animator _currentEnemyAnimator; // if you need to trigger states
+    //public Transform enemySpawnPoint;    // offscreen/right
     public Transform engagePoint;        // where enemy should stand when engaged
     public GameObject enemyPrefab;       // prefab with Sprite+Animator
     public float enemyMoveSpeed = 2.5f;
@@ -77,6 +88,57 @@ if (enemySpawnPoint == null || engagePoint == null) Debug.LogWarning("[Battle] P
             game.OnPlayerKilled -= HandlePlayerKilled;
         }
     }
+    private GameObject PickRandomEnemyPrefab()
+    {
+        if (enemyPrefabs == null || enemyPrefabs.Length == 0)
+        {
+            Debug.LogError("No enemyPrefabs assigned on BattleVisualController.");
+            return null;
+        }
+        return enemyPrefabs[UnityEngine.Random.Range(0, enemyPrefabs.Length)];
+    }
+private void SpawnEnemyRandom()
+{
+    // Clean up previous
+    if (_currentEnemy != null) Destroy(_currentEnemy);
+
+    var prefab = PickRandomEnemyPrefab();
+    if (prefab == null) return;
+
+    _currentEnemy = Instantiate(
+        prefab,
+        enemySpawnPoint != null ? enemySpawnPoint.position : Vector3.zero,
+        Quaternion.identity,
+        enemyParent
+    );
+
+    _currentEnemySR = _currentEnemy.GetComponentInChildren<SpriteRenderer>();
+    _currentEnemyAnimator = _currentEnemy.GetComponentInChildren<Animator>();
+
+    // Reset visuals
+    if (_currentEnemySR != null)
+    {
+        _currentEnemySR.color = Color.white;
+        _currentEnemy.transform.localScale = Vector3.one;
+    }
+
+    // If you need to flip or put it on the right sorting layer, do that here…
+    // e.g., _currentEnemySR.sortingLayerName = "Characters";
+}
+
+private void MakeCurrentEnemyBossy()
+{
+    if (_currentEnemy == null) return;
+
+    // Scale + tint
+    _currentEnemy.transform.localScale = Vector3.one * bossScale;
+    if (_currentEnemySR != null) _currentEnemySR.color = bossTint;
+
+    // If you compute enemy stats here, multiply them as well (HP/ATK/DEF buffs)
+    // Example, if you have a component that holds runtime stats:
+    // var rt = _currentEnemy.GetComponent<EnemyRuntime>();
+    // if (rt != null) { rt.HP = Mathf.RoundToInt(rt.HP * 3f); rt.ATK = Mathf.RoundToInt(rt.ATK * 1.75f); rt.DEF *= 2; }
+}
 
     // ----------------- Safe Animator helpers -----------------
     static bool HasState(Animator anim, string stateName, int layer = 0)
@@ -269,7 +331,12 @@ public void OnEnemyAttackImpact()
     IEnumerator EnemyDeathThenRespawn()
     {
         yield return new WaitForSeconds(0.6f); // death anim length
-        SpawnEnemyVisual();
+        SpawnEnemyRandom();
+        _killCount++;
+        if (bossEvery > 0 && _killCount % bossEvery == 0)
+    {
+        MakeCurrentEnemyBossy();
+    }
         StartApproach();
     }
 
