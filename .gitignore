@@ -97,3 +97,36 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+# Firebase crashlytics build folder
+firebase-crashlytics-build/
+
+# Firebase or Google-generated JSON files (only if they contain private keys)
+google-services.json
+GoogleService-Info.plist
+
+# Android Gradle build system
+/.gradle/
+/*.iml
+.gradle/
+/local.properties
+*.keystore
+
+# Unity's internal gradle cache
+/[Aa]ssets/Plugins/Android/gradle*
+
+# Android Studio or IntelliJ project files
+*.idea/
+.idea/*
+*.iws
+
+# Android logcat captures
+*.logcat
+
+# Unity Android Export (if exporting as a gradle project)
+export/
+# Ignore large Firebase plugin binaries unless explicitly needed
+*.so
+*.bundle
+# Unity Editor logs and crash dumps
+Editor.log
+upm-diag.log
