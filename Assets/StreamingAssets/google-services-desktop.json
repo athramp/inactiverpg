@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "2088852815",
+    "project_id": "inactiverpg",
+    "storage_bucket": "inactiverpg.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:2088852815:android:ba09bb8555beec660ab93a",
+        "android_client_info": {
+          "package_name": "com.ath.inactiverpg"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMc804VNZYT3vvtfFRCDk8We1kEzB8GyI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

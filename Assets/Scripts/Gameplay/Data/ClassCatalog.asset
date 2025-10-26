@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3961df0ced1bf6448a1c8ff48f9646c0, type: 3}
+  m_Name: ClassCatalog
+  m_EditorClassIdentifier: 
+  classes:
+  - ClassId: Warrior
+    BaseHP: 100
+    BaseATK: 20
+    BaseDEF: 10
+    HpGrowth: 15
+    AtkGrowth: 3
+    DefGrowth: 1
+  - ClassId: Mage
+    BaseHP: 60
+    BaseATK: 30
+    BaseDEF: 5
+    HpGrowth: 10
+    AtkGrowth: 5
+    DefGrowth: 0.5
+  - ClassId: Archer
+    BaseHP: 80
+    BaseATK: 25
+    BaseDEF: 7
+    HpGrowth: 12
+    AtkGrowth: 4
+    DefGrowth: 0.8
