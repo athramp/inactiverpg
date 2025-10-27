@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Reflection;
 using UnityEngine;
+using System; // <— for Action
 
 public partial class BattleVisualController : MonoBehaviour
 {
@@ -9,6 +10,13 @@ public partial class BattleVisualController : MonoBehaviour
     public GameLoopService game;           // drag your GameRoot (GameLoopService) here
     public Transform playerRoot;           // where your player sprite sits
     public Animator playerAnimator;        // player's Animator
+    // ===== Engine / Orchestrator hooks (assigned by CombatOrchestrator) =====
+    [Header("Engine/Orchestrator Hooks")]
+    public bool useEngineDrive = false; // when true, the engine controls attack timing
+
+    // Orchestrator will subscribe to these to receive animation hit frames:
+    public Action PlayerImpactEvent; // invoked when player's attack animation hits
+    public Action EnemyImpactEvent;  // invoked when enemy's attack animation hits
 
     [Header("Colliders (engagement & validation)")]
     public Collider2D playerEngageZone;    // player's front body/engage trigger
@@ -106,7 +114,31 @@ public partial class BattleVisualController : MonoBehaviour
         }
         return enemyPrefabs[UnityEngine.Random.Range(0, enemyPrefabs.Length)];
     }
+    public void TriggerPlayerAttack()
+    {
+        if (!playerAnimator) return;
+        if (HasState(playerAnimator, Player_AttackState))
+            SafePlay(playerAnimator, Player_AttackState);
+        else
+            SafeTrigger(playerAnimator, Param_AttackTrigger);
+    }
+    public void TriggerEnemyAttack()
+    {
+        if (!enemyAnimator) return;
+        if (HasState(enemyAnimator, Enemy_AttackState))
+            SafePlay(enemyAnimator, Enemy_AttackState);
+        else
+            SafeTrigger(enemyAnimator, Param_AttackTrigger);
+    }
+    public void SetPlayerHp(int hp, int maxHp) { /* hook HP bar if you want */ }
+public void SetEnemyHp(int hp, int maxHp)  { /* hook HP bar if you want */ }
+public void SetXp(int xp, int xpToNext)    { /* forward to UI if you want */ }
 
+public void OnEnemyDied()  { HandleEnemyKilled(); }
+public void OnPlayerDied() { HandlePlayerKilled(); }
+
+public void OnEnemyRespawned() { /* visual refresh if needed */ }
+public void OnPlayerRespawned(){ /* visual refresh if needed */ }
 private void SpawnEnemyRandom()
 {
     // Clean up any previous instance
@@ -411,6 +443,8 @@ private void UpdateEnemyHpBarFromRuntime()
     // ----------------- Combat loops -----------------
     private void StartCombatLoops()
     {
+        if (useEngineDrive)
+            return; // the engine will call TriggerPlayerAttack/TriggerEnemyAttack
         if (playerAtkCo != null) StopCoroutine(playerAtkCo);
         if (enemyAtkCo  != null) StopCoroutine(enemyAtkCo);
 
@@ -453,43 +487,51 @@ private void UpdateEnemyHpBarFromRuntime()
     // ----------------- Animation Events -----------------
     public void OnPlayerAttackImpact()
     {
-        if (game == null) return;
+            // NEW: notify the engine (no-op if nobody subscribed)
+            PlayerImpactEvent?.Invoke();
 
-        // Optional: validate range if you have a playerAttackRange
-        if (playerAttackRange && enemyBody)
-        {
-            var d = playerAttackRange.Distance(enemyBody);
-            if (d.distance > 0f) return; // not in range
-        }
+            if (useEngineDrive)
+            {
+                // Engine applies damage; visuals can still play the hit reaction:
+                if (HasState(enemyAnimator, Enemy_HitState)) SafePlay(enemyAnimator, Enemy_HitState);
+                else SafeTrigger(enemyAnimator, Param_HitTrigger);
+                return; // do not call game.PlayerAttackOnce() when engine drives
+            }
 
-        int dmg = game.PlayerAttackOnce();
-        UpdateEnemyHpBarFromRuntime();
+            // === existing logic (old flow) ===
+            if (game == null) return;
 
-        // play enemy hurt
-        if (HasState(enemyAnimator, Enemy_HitState))
-            SafePlay(enemyAnimator, Enemy_HitState, 0f);
-        else
-            SafeTrigger(enemyAnimator, Param_HitTrigger);
+            if (playerAttackRange && enemyBody)
+            {
+                var d = playerAttackRange.Distance(enemyBody);
+                if (d.distance > 0f) return; // not in range → no damage
+            }
+
+            int dmg = game.PlayerAttackOnce();
+
+            if (HasState(enemyAnimator, Enemy_HitState)) SafePlay(enemyAnimator, Enemy_HitState);
+            else SafeTrigger(enemyAnimator, Param_HitTrigger);
     }
 
     public void OnEnemyAttackImpact()
     {
-        if (game == null) return;
+            // NEW: notify the engine first
+            EnemyImpactEvent?.Invoke();
 
-        // Validate enemy vs player's engage zone
-        if (playerEngageZone && enemyBody)
-        {
-            var d = playerEngageZone.Distance(enemyBody);
-            if (d.distance > 0f) return; // not in range
-        }
+            if (useEngineDrive)
+            {
+                if (HasState(playerAnimator, Player_HitState)) SafePlay(playerAnimator, Player_HitState);
+                else SafeTrigger(playerAnimator, Param_HitTrigger);
+                return; // do not call game.EnemyAttackOnce() when engine drives
+            }
 
-        int dmg = game.EnemyAttackOnce();
+            // === existing logic (old flow) ===
+            if (game == null) return;
 
-        // play player hurt
-        if (HasState(playerAnimator, Player_HitState))
-            SafePlay(playerAnimator, Player_HitState, 0f);
-        else
-            SafeTrigger(playerAnimator, Param_HitTrigger);
+            int dmg = game.EnemyAttackOnce();
+
+            if (HasState(playerAnimator, Player_HitState)) SafePlay(playerAnimator, Player_HitState);
+            else SafeTrigger(playerAnimator, Param_HitTrigger);
     }
 
     // ----------------- Game events -----------------

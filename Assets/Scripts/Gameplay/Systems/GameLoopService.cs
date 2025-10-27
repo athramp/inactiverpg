@@ -85,7 +85,7 @@ public void Initialize(string classId)
     Debug.Log($"[GameLoop] Initialized with class {classId}");
 }
 
-    void SpawnEnemy()
+    public void SpawnEnemy()
     {
         int enemyLevel = Mathf.Max(1, Player.Level);
         Enemy = new EnemyStats(enemyLevel);
@@ -101,17 +101,17 @@ public void Initialize(string classId)
             if (UseVisualCombat)
                 continue;
             
-            int dmgToEnemy = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-            Enemy.Hp -= dmgToEnemy;
+            // int dmgToEnemy = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
+            // Enemy.Hp -= dmgToEnemy;
             if (Enemy.Hp <= 0)
             {
                 Player.GainXp(50);
                 SpawnEnemy();
             }
 
-            int dmgToPlayer = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-            Player.Hp -= dmgToPlayer;
-            if (Player.Hp <= 0) Player.Hp = Player.MaxHp;
+            // int dmgToPlayer = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
+            // Player.Hp -= dmgToPlayer;
+            // if (Player.Hp <= 0) Player.Hp = Player.MaxHp;
         }
     }
 }
