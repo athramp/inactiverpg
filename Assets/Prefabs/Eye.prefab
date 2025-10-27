@@ -122,6 +122,7 @@ GameObject:
   - component: {fileID: 1640646192311594191}
   - component: {fileID: 5595588679007028410}
   - component: {fileID: 8243556597763229595}
+  - component: {fileID: -8097075679201244255}
   m_Layer: 0
   m_Name: Eye
   m_TagString: Untagged
@@ -264,3 +265,16 @@ Rigidbody2D:
   m_SleepingMode: 1
   m_CollisionDetection: 0
   m_Constraints: 0
+--- !u!114 &-8097075679201244255
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8539923866264311644}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eab376267a3fe2c4e836d0d9b1e86588, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  def: {fileID: 11400000, guid: 5a042fd68cb3e474aa6af0a16989ef87, type: 2}

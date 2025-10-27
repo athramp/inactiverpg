@@ -1,5 +1,6 @@
 // Assets/Scripts/Gameplay/Systems/BattleVisualController.cs
 using System.Collections;
+using System.Reflection;
 using UnityEngine;
 
 public partial class BattleVisualController : MonoBehaviour
@@ -14,7 +15,7 @@ public partial class BattleVisualController : MonoBehaviour
     public Collider2D playerAttackRange;   // player's attack range (optional)
 
     [Header("Enemy Spawning")]
-    [SerializeField] private GameObject[] enemyPrefabs;   // Orc, Skeleton, Mushroom, etc.
+    [SerializeField] private GameObject[] enemyPrefabs;   // Eye, Goblin, Mushroom, Orc, Skeleton, etc.
     [SerializeField] private Transform enemySpawnPoint;   // spawn location (usually right side)
     [SerializeField] private Transform enemyParent;       // optional parent for cleanliness
 
@@ -44,11 +45,11 @@ public partial class BattleVisualController : MonoBehaviour
     public string Player_DeathState  = "Soldier-Death";
 
     [Header("Enemy State Names (unify across enemy controllers)")]
-    public string Enemy_IdleState   = "Orc-Idle";
-    public string Enemy_WalkState   = "Orc-Walk";
-    public string Enemy_AttackState = "Orc-Attack";
-    public string Enemy_HitState    = "Orc-Hurt";
-    public string Enemy_DeathState  = "Orc-Death";
+    public string Enemy_IdleState   = "Idle";     // recommend unifying to simple names
+    public string Enemy_WalkState   = "Walk";
+    public string Enemy_AttackState = "Attack";
+    public string Enemy_HitState    = "Hurt";
+    public string Enemy_DeathState  = "Death";
 
     // ---- Runtime caches ----
     private int _killCount;
@@ -56,6 +57,7 @@ public partial class BattleVisualController : MonoBehaviour
     private SpriteRenderer _currentEnemySR;
     private Animator _currentEnemyAnimator;
     private Vector3 _enemyBaseScale = Vector3.one;
+    private SimpleHpBar2D _enemyHpBar;
 
     private Transform enemyRoot;
     private Animator enemyAnimator;
@@ -105,64 +107,243 @@ public partial class BattleVisualController : MonoBehaviour
         return enemyPrefabs[UnityEngine.Random.Range(0, enemyPrefabs.Length)];
     }
 
-    private void SpawnEnemyRandom()
+private void SpawnEnemyRandom()
+{
+    // Clean up any previous instance
+    if (_currentEnemy != null)
     {
-        // Clean up any previous instance
-        if (_currentEnemy != null)
+        if (approachCo != null)
         {
-            if (approachCo != null)
-            {
-                StopCoroutine(approachCo);
-                approachCo = null;
-            }
-
-            Destroy(_currentEnemy);
-            _currentEnemy = null;
-            _currentEnemySR = null;
-            _currentEnemyAnimator = null;
+            StopCoroutine(approachCo);
+            approachCo = null;
         }
 
-        // Pick prefab
-        var prefab = PickRandomEnemyPrefab();
-        if (prefab == null) return;
+        Destroy(_currentEnemy);
+        _currentEnemy = null;
+        _currentEnemySR = null;
+        _currentEnemyAnimator = null;
+        _enemyHpBar = null; // clear old ref
+    }
 
-        // Spawn
-        Vector3 spawnPos = enemySpawnPoint ? enemySpawnPoint.position : Vector3.zero;
-        _currentEnemy = Instantiate(
-            prefab,
-            spawnPos,
-            Quaternion.identity,
-            enemyParent ? enemyParent : transform
-        );
+    // Pick prefab
+    var prefab = PickRandomEnemyPrefab();
+    if (prefab == null) return;
 
-        // Cache shared references used by the rest of the class
-        _currentEnemySR        = _currentEnemy.GetComponentInChildren<SpriteRenderer>();
-        _currentEnemyAnimator  = _currentEnemy.GetComponentInChildren<Animator>();
-        enemyRoot              = _currentEnemy.transform;
-        enemyAnimator          = _currentEnemyAnimator;
-        enemyBody              = _currentEnemy.GetComponentInChildren<Collider2D>();
+    // Spawn
+    Vector3 spawnPos = enemySpawnPoint ? enemySpawnPoint.position : Vector3.zero;
+    _currentEnemy = Instantiate(
+        prefab,
+        spawnPos,
+        Quaternion.identity,
+        enemyParent ? enemyParent : transform
+    );
 
-        if (enemyAnimator == null)
+    // Cache shared references used by the rest of the class
+    _currentEnemySR = _currentEnemy.GetComponentInChildren<SpriteRenderer>();
+    _currentEnemyAnimator = _currentEnemy.GetComponentInChildren<Animator>();
+    enemyRoot = _currentEnemy.transform;
+    enemyAnimator = _currentEnemyAnimator;
+    enemyBody = _currentEnemy.GetComponentInChildren<Collider2D>();
+
+    if (enemyAnimator == null)
+    {
+        Debug.LogError("[Battle] Spawned enemy missing Animator.");
+        return;
+    }
+
+    // Reset visuals
+    if (_currentEnemySR) _currentEnemySR.color = Color.white;
+    _enemyBaseScale = _currentEnemy.transform.localScale;
+    _currentEnemy.transform.localScale = _enemyBaseScale;
+
+    // Boss check
+    bool isBoss = bossEvery > 0 && _killCount > 0 && _killCount % bossEvery == 0;
+
+    // Apply MonsterDef → runtime stats + visual (scale/tint)
+    InitEnemyFromDef(_currentEnemy, isBoss);
+
+    // HP BAR: cache it *after* the prefab exists, then init *after* stats are applied
+    _enemyHpBar = _currentEnemy.GetComponentInChildren<SimpleHpBar2D>(true);
+    UpdateEnemyHpBarFromRuntime();
+
+    // Reset animator to Idle
+    SafePlay(enemyAnimator, Enemy_IdleState, 0f);
+}
+
+
+    /// <summary>
+    /// Reads MonsterTag/MonsterDef from the spawned prefab, sets visual scale/tint,
+    /// and pushes stats into the game's enemy runtime (via reflection so your current
+    /// GameLoopService shape keeps compiling).
+    /// </summary>
+    // --- Updates the enemy HP bar (SimpleHpBar2D) based on runtime HP values ---
+private void UpdateEnemyHpBarFromRuntime()
+{
+    if (_enemyHpBar == null || game == null) return;
+
+    object enemyRuntime = null;
+
+    // Try to locate your runtime enemy object in GameLoopService
+    var f = game.GetType().GetField("enemy", 
+        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+    if (f != null) enemyRuntime = f.GetValue(game);
+
+    if (enemyRuntime == null)
+    {
+        var p = game.GetType().GetProperty("Enemy", 
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        if (p != null) enemyRuntime = p.GetValue(game, null);
+    }
+
+    if (enemyRuntime == null) return;
+
+    // --- Try to read max HP ---
+    int maxHp = 1;
+    var final = TryGetMember(enemyRuntime, "Final");
+    if (final is System.Collections.IDictionary dict && dict.Contains("hp"))
+        maxHp = Mathf.Max(1, System.Convert.ToInt32(dict["hp"]));
+    else
+        maxHp = Mathf.Max(1, System.Convert.ToInt32(TryGetMember(enemyRuntime, "HP") ?? 1));
+
+    // --- Try to read current HP ---
+    int curHp = Mathf.Max(0, System.Convert.ToInt32(TryGetMember(enemyRuntime, "CurrentHP") ?? maxHp));
+
+    _enemyHpBar.SetMax(maxHp);
+    _enemyHpBar.SetCurrent(curHp);
+}
+
+    private void InitEnemyFromDef(GameObject enemyGO, bool isBoss)
+    {
+        if (!enemyGO) return;
+
+        var tag = enemyGO.GetComponentInChildren<MonsterTag>();
+        if (!tag || !tag.def)
         {
-            Debug.LogError("[Battle] Spawned enemy missing Animator.");
+            Debug.LogWarning("[Battle] Missing MonsterTag/MonsterDef on enemy prefab; using existing runtime values.");
+        }
+        else
+        {
+            var d = tag.def;
+
+            // Visuals
+            _enemyBaseScale = enemyGO.transform.localScale;
+            float scaleMul = isBoss ? bossScaleFactor : 1f;
+            enemyGO.transform.localScale = Vector3.one * d.baseScale * scaleMul; // respect def scale baseline
+
+            if (_currentEnemySR) _currentEnemySR.color = isBoss ? bossTint : d.tint;
+
+            // Try to push stats into GameLoopService.enemy (reflection-based to avoid hard coupling)
+            if (game != null)
+            {
+                object enemyRuntime = null;
+
+                // 1) Look for a field named "enemy"
+                var f = game.GetType().GetField("enemy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null) enemyRuntime = f.GetValue(game);
+
+                // 2) If not found, look for a property named "Enemy"
+                if (enemyRuntime == null)
+                {
+                    var p = game.GetType().GetProperty("Enemy", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (p != null) enemyRuntime = p.GetValue(game, null);
+                }
+
+                if (enemyRuntime != null)
+                {
+                    TrySetMember(enemyRuntime, "MonsterId", d.monsterId);
+
+                    // XP reward (boss multiplier)
+                    int xp = isBoss ? Mathf.RoundToInt(d.xpReward * 3.0f) : d.xpReward;
+                    TrySetMember(enemyRuntime, "XpReward", xp);
+
+                    // Final stat map (supports Dictionary<string,float> or your StatMap)
+                    var final = TryGetMember(enemyRuntime, "Final");
+                    if (final is System.Collections.IDictionary dict)
+                    {
+                        dict["hp"]          = isBoss ? Mathf.RoundToInt(d.hp  * 3.0f) : d.hp;
+                        dict["atk"]         = isBoss ? Mathf.RoundToInt(d.atk * 1.8f) : d.atk;
+                        dict["def"]         = isBoss ? Mathf.RoundToInt(d.def * 2.0f) : d.def;
+                        dict["crit_chance"] = d.critChance;
+                        dict["crit_mult"]   = d.critMult;
+                    }
+                    else
+                    {
+                        // Fallback: individual fields if you used simple ints/floats
+                        TrySetMember(enemyRuntime, "HP",  isBoss ? Mathf.RoundToInt(d.hp  * 3.0f) : d.hp);
+                        TrySetMember(enemyRuntime, "ATK", isBoss ? Mathf.RoundToInt(d.atk * 1.8f) : d.atk);
+                        TrySetMember(enemyRuntime, "DEF", isBoss ? Mathf.RoundToInt(d.def * 2.0f) : d.def);
+                        TrySetMember(enemyRuntime, "CritChance", d.critChance);
+                        TrySetMember(enemyRuntime, "CritMult",   d.critMult);
+                    }
+
+                    // Initialize CurrentHP if your runtime has it
+                    var initHpMethod = enemyRuntime.GetType().GetMethod("InitHP",
+                        BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (initHpMethod != null) initHpMethod.Invoke(enemyRuntime, null);
+                }
+                else
+                {
+                    Debug.LogWarning("[Battle] Could not find game.enemy runtime via reflection. Stats were not pushed.");
+                }
+            }
+        }
+
+        // If it wasn't a boss but you still want def.tint applied (already done above), nothing else needed.
+    }
+
+    // Reflection helpers
+    private static void TrySetMember(object obj, string name, object value)
+    {
+        if (obj == null) return;
+        var t = obj.GetType();
+
+        var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (f != null)
+        {
+            if (value != null && f.FieldType != value.GetType())
+            {
+                value = ConvertValue(value, f.FieldType);
+            }
+            f.SetValue(obj, value);
             return;
         }
 
-        // Reset visuals
-        if (_currentEnemySR) _currentEnemySR.color = Color.white;
-        _enemyBaseScale = _currentEnemy.transform.localScale; // record this prefab's base (often ~20x)
-        _currentEnemy.transform.localScale = _enemyBaseScale;
-
-        // Boss check (multiply scale, don't overwrite)
-        bool isBoss = bossEvery > 0 && _killCount > 0 && _killCount % bossEvery == 0;
-        if (isBoss)
+        var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.CanWrite)
         {
-            _currentEnemy.transform.localScale = _enemyBaseScale * bossScaleFactor;
-            if (_currentEnemySR) _currentEnemySR.color = bossTint;
+            if (value != null && p.PropertyType != value.GetType())
+            {
+                value = ConvertValue(value, p.PropertyType);
+            }
+            p.SetValue(obj, value, null);
         }
+    }
 
-        // Reset animator to Idle
-        SafePlay(enemyAnimator, Enemy_IdleState, 0f);
+    private static object TryGetMember(object obj, string name)
+    {
+        if (obj == null) return null;
+        var t = obj.GetType();
+
+        var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (f != null) return f.GetValue(obj);
+
+        var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (p != null && p.CanRead) return p.GetValue(obj, null);
+
+        return null;
+    }
+
+    private static object ConvertValue(object value, System.Type targetType)
+    {
+        try
+        {
+            if (targetType == typeof(int))   return System.Convert.ToInt32(value);
+            if (targetType == typeof(float)) return System.Convert.ToSingle(value);
+            if (targetType == typeof(double))return System.Convert.ToDouble(value);
+            if (targetType == typeof(string))return System.Convert.ToString(value);
+            return value;
+        }
+        catch { return value; }
     }
 
     // ----------------- Approach / Engage -----------------
@@ -282,7 +463,9 @@ public partial class BattleVisualController : MonoBehaviour
         }
 
         int dmg = game.PlayerAttackOnce();
+        UpdateEnemyHpBarFromRuntime();
 
+        // play enemy hurt
         if (HasState(enemyAnimator, Enemy_HitState))
             SafePlay(enemyAnimator, Enemy_HitState, 0f);
         else
@@ -302,6 +485,7 @@ public partial class BattleVisualController : MonoBehaviour
 
         int dmg = game.EnemyAttackOnce();
 
+        // play player hurt
         if (HasState(playerAnimator, Player_HitState))
             SafePlay(playerAnimator, Player_HitState, 0f);
         else
@@ -320,18 +504,19 @@ public partial class BattleVisualController : MonoBehaviour
         StartCoroutine(EnemyDeathThenRespawn());
     }
 
-    private IEnumerator EnemyDeathThenRespawn()
-    {
-        yield return new WaitForSeconds(0.6f); // death anim length buffer
+private IEnumerator EnemyDeathThenRespawn()
+{
+    yield return new WaitForSeconds(0.6f);
 
-        _killCount++;
-        SpawnEnemyRandom();
+    _killCount++;
+    SpawnEnemyRandom();
 
-        // If you want the boss check here (instead of inside Spawn), you can:
-        // if (bossEvery > 0 && _killCount % bossEvery == 0) { /* scale/tint here */ }
+    // ensure the new enemy’s bar shows full HP
+    UpdateEnemyHpBarFromRuntime();
 
-        StartApproach();
-    }
+    StartApproach();
+}
+
 
     private void HandlePlayerKilled()
     {

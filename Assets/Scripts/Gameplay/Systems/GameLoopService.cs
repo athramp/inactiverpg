@@ -28,6 +28,7 @@ public class GameLoopService : MonoBehaviour
     IsEngaged = true;
     Debug.Log("[GameLoop] Engagement started");
 }
+// after damage is applied
 
 // Call this from animation event or a timed coroutine
 public int PlayerAttackOnce()
