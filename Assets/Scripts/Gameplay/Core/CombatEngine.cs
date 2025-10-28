@@ -2,6 +2,7 @@
 namespace Core.Combat
 {
     public enum Side { Player, Enemy }
+    // timers
 
     public struct FighterState
     {
@@ -34,6 +35,13 @@ namespace Core.Combat
         public EngineConfig Config;
 
         float _pTimer, _eTimer;
+        // awaiting-impact guards
+
+        float _pAwaitTimer, _eAwaitTimer;
+
+        // NEW: allow exactly one impact per scheduled attack
+        bool _playerAwaitingImpact, _enemyAwaitingImpact;
+        const float AWAIT_WINDOW = 1.0f;
 
         public delegate void EventSink(in CombatEvent e);
         readonly EventSink _emit;
@@ -43,23 +51,64 @@ namespace Core.Combat
 
         public void Tick(float dt)
         {
-            if (!Player.IsDead)
+            // schedule attacks
+            if (!Player.IsDead && !Enemy.IsDead)
             {
                 _pTimer += dt;
-                if (_pTimer >= Config.PlayerAttackRateSec) { _pTimer = 0; _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Player)); }
-            }
-            if (!Enemy.IsDead)
-            {
+                if (_pTimer >= Config.PlayerAttackRateSec && !_playerAwaitingImpact)
+                {
+                    _pTimer -= Config.PlayerAttackRateSec;
+                    _playerAwaitingImpact = true;
+                    _pAwaitTimer = 0f;                     // reset window
+                    _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Player));
+                }
+
                 _eTimer += dt;
-                if (_eTimer >= Config.EnemyAttackRateSec) { _eTimer = 0; _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Enemy)); }
+                if (_eTimer >= Config.EnemyAttackRateSec && !_enemyAwaitingImpact)
+                {
+                    _eTimer -= Config.EnemyAttackRateSec;
+                    _enemyAwaitingImpact = true;
+                    _eAwaitTimer = 0f;                     // reset window
+                    _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Enemy));
+                }
+            }
+
+            // impact window timeout (prevents permanent stalls if impact never arrives)
+            if (_playerAwaitingImpact)
+            {
+                _pAwaitTimer += dt;
+                if (_pAwaitTimer > AWAIT_WINDOW)
+                {
+                    _playerAwaitingImpact = false;
+                    _pAwaitTimer = 0f;
+                    // (optional) _emit(new CombatEvent(CombatEventType.AttackCanceled, Side.Player));
+                }
+            }
+            if (_enemyAwaitingImpact)
+            {
+                _eAwaitTimer += dt;
+                if (_eAwaitTimer > AWAIT_WINDOW)
+                {
+                    _enemyAwaitingImpact = false;
+                    _eAwaitTimer = 0f;
+                    // (optional) _emit(new CombatEvent(CombatEventType.AttackCanceled, Side.Enemy));
+                }
             }
         }
-
+        public void CancelPendingImpact(Side s)
+        {
+            if (s == Side.Player) _playerAwaitingImpact = false;
+            else _enemyAwaitingImpact = false;
+        }
         // Call when the animation's hit frame happens:
         public void OnImpact(Side attacker)
         {
-            if (attacker == Side.Player && !Player.IsDead && !Enemy.IsDead)
+            if (attacker == Side.Player)
             {
+                if (!_playerAwaitingImpact || Player.IsDead || Enemy.IsDead) return;
+                _playerAwaitingImpact = false; // consume token
+                _pAwaitTimer = 0f;
+
                 int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
                 Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
                 _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
@@ -71,8 +120,11 @@ namespace Core.Combat
                     _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
                 }
             }
-            else if (attacker == Side.Enemy && !Enemy.IsDead && !Player.IsDead)
+            else // Enemy
             {
+                if (!_enemyAwaitingImpact || Enemy.IsDead || Player.IsDead) return;
+                _enemyAwaitingImpact = false; // consume token
+                _eAwaitTimer = 0f;
                 int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
                 Player.Hp = System.Math.Max(0, Player.Hp - dmg);
                 _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
@@ -87,15 +139,22 @@ namespace Core.Combat
         public void RespawnEnemy(FighterState newEnemy)
         {
             Enemy = newEnemy;
-            if (Enemy.Hp <= 0)
-                Enemy.Hp = Enemy.MaxHp;
+            if (Enemy.Hp <= 0) Enemy.Hp = Enemy.MaxHp;
+
+            // reset cadence
+            _enemyAwaitingImpact = false; _eTimer = 0f;
+            _playerAwaitingImpact = false; _pTimer = 0f;
+
             _emit(new CombatEvent(CombatEventType.Respawned, Side.Enemy));
         }
 
         public void RespawnPlayer()
         {
-            if (Player.Hp <= 0)
-                Player.Hp = Player.MaxHp;
+            if (Player.Hp <= 0) Player.Hp = Player.MaxHp;
+
+            _playerAwaitingImpact = false; _pTimer = 0f;
+            _enemyAwaitingImpact = false; _eTimer = 0f;
+
             _emit(new CombatEvent(CombatEventType.Respawned, Side.Player));
         }
     }

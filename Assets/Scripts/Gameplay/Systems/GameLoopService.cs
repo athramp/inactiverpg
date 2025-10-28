@@ -14,9 +14,6 @@ public class GameLoopService : MonoBehaviour
 
     public bool IsInitialized { get; private set; }
 
-    Coroutine loopCo;
-    public bool UseVisualCombat = true;   // when true, we won't auto-attack in the internal loop
-
     public event System.Action<int> OnPlayerHit;   // dmg dealt to enemy
     public event System.Action<int> OnEnemyHit;    // dmg dealt to player
     public event System.Action OnEnemyKilled;
@@ -80,7 +77,6 @@ public void Initialize(string classId)
 
     Player = new PlayerStats(classCatalog, xpTable, classId);
     SpawnEnemy();
-    loopCo = StartCoroutine(GameLoop());
     IsInitialized = true;
     Debug.Log($"[GameLoop] Initialized with class {classId}");
 }
@@ -90,28 +86,5 @@ public void Initialize(string classId)
         int enemyLevel = Mathf.Max(1, Player.Level);
         Enemy = new EnemyStats(enemyLevel);
         Debug.Log($"Spawned enemy Lv{Enemy.Level} HP:{Enemy.Hp}");
-    }
-
-    IEnumerator GameLoop()
-    {
-        var wait = new WaitForSeconds(1f); // 1 attack/sec for now
-        while (true)
-        {
-            yield return wait;
-            if (UseVisualCombat)
-                continue;
-            
-            // int dmgToEnemy = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-            // Enemy.Hp -= dmgToEnemy;
-            if (Enemy.Hp <= 0)
-            {
-                Player.GainXp(50);
-                SpawnEnemy();
-            }
-
-            // int dmgToPlayer = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-            // Player.Hp -= dmgToPlayer;
-            // if (Player.Hp <= 0) Player.Hp = Player.MaxHp;
-        }
     }
 }
