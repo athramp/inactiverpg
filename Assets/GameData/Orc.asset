@@ -15,7 +15,7 @@ MonoBehaviour:
   monsterId: Orc
   displayName: Orc
   tier: 1
-  hp: 220
+  hp: 10000
   atk: 16
   def: 6
   critChance: 0.06

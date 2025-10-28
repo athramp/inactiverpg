@@ -153,35 +153,35 @@ public class FirebaseGate : MonoBehaviour
     // -------- Minimal HUD --------
     void SetHud(string text)
     {
-        if (!Application.isPlaying) return;
+        // if (!Application.isPlaying) return;
 
-        if (statusLabel == null)
-        {
-            // Create a tiny overlay label if none provided.
-            var hudGo = new GameObject("FirebaseHUD");
-            var canvas = new GameObject("FirebaseHUDCanvas");
-            var c = canvas.AddComponent<Canvas>();
-            c.renderMode = RenderMode.ScreenSpaceOverlay;
-            DontDestroyOnLoad(canvas);
-            hudGo.transform.SetParent(canvas.transform);
+        // if (statusLabel == null)
+        // {
+        //     // Create a tiny overlay label if none provided.
+        //     var hudGo = new GameObject("FirebaseHUD");
+        //     var canvas = new GameObject("FirebaseHUDCanvas");
+        //     var c = canvas.AddComponent<Canvas>();
+        //     c.renderMode = RenderMode.ScreenSpaceOverlay;
+        //     DontDestroyOnLoad(canvas);
+        //     hudGo.transform.SetParent(canvas.transform);
 
-            var rect = hudGo.AddComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0, 1);
-            rect.anchorMax = new Vector2(0, 1);
-            rect.pivot = new Vector2(0, 1);
-            rect.anchoredPosition = new Vector2(8, -8);
-            rect.sizeDelta = new Vector2(420, 64);
+        //     var rect = hudGo.AddComponent<RectTransform>();
+        //     rect.anchorMin = new Vector2(0, 1);
+        //     rect.anchorMax = new Vector2(0, 1);
+        //     rect.pivot = new Vector2(0, 1);
+        //     rect.anchoredPosition = new Vector2(8, -8);
+        //     rect.sizeDelta = new Vector2(420, 64);
 
-            statusLabel = hudGo.AddComponent<TextMeshProUGUI>();
-            statusLabel.fontSize = 18;
-            statusLabel.alignment = TextAlignmentOptions.Left;
-            statusLabel.enableWordWrapping = false;
-            statusLabel.color = new Color(1, 1, 1, 0.92f);
-            var bg = hudGo.AddComponent<FirebaseHudBG>();
-            bg.SetColor(new Color(0, 0, 0, 0.5f));
-        }
+        //     statusLabel = hudGo.AddComponent<TextMeshProUGUI>();
+        //     statusLabel.fontSize = 18;
+        //     statusLabel.alignment = TextAlignmentOptions.Left;
+        //     statusLabel.enableWordWrapping = false;
+        //     statusLabel.color = new Color(1, 1, 1, 0.92f);
+        //     var bg = hudGo.AddComponent<FirebaseHudBG>();
+        //     bg.SetColor(new Color(0, 0, 0, 0.5f));
+        // }
 
-        statusLabel.text = text;
+        // statusLabel.text = text;
     }
 
     // Tiny background for the HUD label

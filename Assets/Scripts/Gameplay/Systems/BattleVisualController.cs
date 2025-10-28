@@ -52,6 +52,8 @@ public partial class BattleVisualController : MonoBehaviour
     public string Param_AttackTrigger = "Attack";
     public string Param_HitTrigger = "Hit";
     public string Param_DeadBool = "Dead";
+    public string Param_WalkTrigger = "Walk";
+
 
     [Header("Player State Names (match controller)")]
     public string Player_IdleState = "Player-Idle";
