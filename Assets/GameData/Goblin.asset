@@ -15,12 +15,13 @@ MonoBehaviour:
   monsterId: Goblin
   displayName: Goblin
   tier: 0
+  prefab: {fileID: 3264170349618136456, guid: b0b03274392d3b64d9ad51d67de7bbcb, type: 3}
   hp: 100
   atk: 8
   def: 2
   critChance: 0.03
   critMult: 1.5
   xpReward: 8
-  baseScale: 20
+  baseScale: 2
   tint: {r: 1, g: 1, b: 1, a: 1}
   weight: 1

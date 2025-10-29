@@ -95,7 +95,8 @@ namespace Core.Combat
                 }
             }
         }
-        public void CancelPendingImpact(Side s)
+        public void UpdatePlayer(FighterState s) { Player = s; }
+                public void CancelPendingImpact(Side s)
         {
             if (s == Side.Player) _playerAwaitingImpact = false;
             else _enemyAwaitingImpact = false;
@@ -108,9 +109,10 @@ namespace Core.Combat
                 if (!_playerAwaitingImpact || Player.IsDead || Enemy.IsDead) return;
                 _playerAwaitingImpact = false; // consume token
                 _pAwaitTimer = 0f;
-
+                // DEBUG: print exact numbers engine is using
+                UnityEngine.Debug.Log($"[DMGDBG] Player atk={Player.Atk}  vs Enemy def={Enemy.Def}");
                 int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-                Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
+                Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg); 
                 _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
                 _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
                 if (Enemy.IsDead)
@@ -125,6 +127,7 @@ namespace Core.Combat
                 if (!_enemyAwaitingImpact || Enemy.IsDead || Player.IsDead) return;
                 _enemyAwaitingImpact = false; // consume token
                 _eAwaitTimer = 0f;
+                UnityEngine.Debug.Log($"[DMGDBG] Enemy atk={Enemy.Atk}  vs Player def={Player.Def}");
                 int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
                 Player.Hp = System.Math.Max(0, Player.Hp - dmg);
                 _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));

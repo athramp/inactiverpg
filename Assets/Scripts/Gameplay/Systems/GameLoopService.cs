@@ -7,11 +7,18 @@ public class GameLoopService : MonoBehaviour
     [Header("Data")]
     public ClassCatalog classCatalog;
     public XpTable xpTable;
-
+    [Header("Monsters")]
+    public MonsterDef[] monsterCatalog;         // assign in Inspector
+    public MonsterDef CurrentMonsterDef { get; private set; }
+    public bool CurrentIsBoss { get; private set; }
+    public string PlayerDisplayName { get; private set; } = "Hero";
+    public void SetPlayerDisplayName(string name) => PlayerDisplayName = string.IsNullOrWhiteSpace(name) ? "Hero" : name;
     public PlayerStats Player { get; private set; }
     public EnemyStats  Enemy  { get; private set; }
-    public XpTable     XpTable => xpTable;
-
+    public XpTable XpTable => xpTable;
+        [SerializeField] private PlayerPersistenceService persistence;
+    public bool StatsReady { get; private set; } = false;
+    public void MarkStatsReady() => StatsReady = true;
     public bool IsInitialized { get; private set; }
 
     public event System.Action<int> OnPlayerHit;   // dmg dealt to enemy
@@ -19,45 +26,20 @@ public class GameLoopService : MonoBehaviour
     public event System.Action OnEnemyKilled;
     public event System.Action OnPlayerKilled;
     public bool IsEngaged { get; private set; }
+    [Header("Boss Rules")]
+    [SerializeField] private int bossEvery = 5;  // spawn boss every 10 enemies
+    private int _enemySpawnCount = 0;
     public void BeginEngagement()
 {
     if (IsEngaged) return;
     IsEngaged = true;
     Debug.Log("[GameLoop] Engagement started");
 }
-// after damage is applied
 
-// Call this from animation event or a timed coroutine
-public int PlayerAttackOnce()
+private void Awake()
 {
-    if (!IsInitialized || Enemy == null) return 0;
-    int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-    Enemy.Hp -= dmg;
-    OnPlayerHit?.Invoke(dmg);
-
-    if (Enemy.Hp <= 0)
-    {
-        Player.GainXp(50);
-        OnEnemyKilled?.Invoke();
-        SpawnEnemy();                 // prepare next enemy (Enemy is replaced)
-        IsEngaged = false;            // re-approach next enemy
-    }
-    return dmg;
-}
-
-public int EnemyAttackOnce()
-{
-    if (!IsInitialized || Player == null) return 0;
-    int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-    Player.Hp -= dmg;
-    OnEnemyHit?.Invoke(dmg);
-
-    if (Player.Hp <= 0)
-    {
-        OnPlayerKilled?.Invoke();
-        Player.Hp = Player.MaxHp;     // simple respawn for now
-    }
-    return dmg;
+    if (!persistence)
+        persistence = FindObjectOfType<PlayerPersistenceService>();
 }
     // NEW: call this after login/character selection
 public void Initialize(string classId)
@@ -76,15 +58,46 @@ public void Initialize(string classId)
     }
 
     Player = new PlayerStats(classCatalog, xpTable, classId);
-    SpawnEnemy();
+        SpawnEnemy();
+    StatsReady = false;
     IsInitialized = true;
+    
     Debug.Log($"[GameLoop] Initialized with class {classId}");
 }
 
     public void SpawnEnemy()
     {
         int enemyLevel = Mathf.Max(1, Player.Level);
-        Enemy = new EnemyStats(enemyLevel);
-        Debug.Log($"Spawned enemy Lv{Enemy.Level} HP:{Enemy.Hp}");
+
+        // 1) Pick a MonsterDef (for now: random). Later you’ll pick by stage.
+        if (monsterCatalog == null || monsterCatalog.Length == 0)
+        {
+            Debug.LogError("[GameLoop] No MonsterDefs assigned.");
+            CurrentMonsterDef = null;
+            Enemy = new EnemyStats(enemyLevel); // fallback
+            return;
+        }
+        var def = monsterCatalog[Random.Range(0, monsterCatalog.Length)];
+        CurrentMonsterDef = def;
+
+        // 2) Boss rule (optional)
+        _enemySpawnCount++;
+        bool isBoss = (bossEvery > 0 && _enemySpawnCount % bossEvery == 0);
+
+        // 3) Build EnemyStats from the def (source of truth)
+        Enemy = new EnemyStats(enemyLevel)
+        {
+            MonsterId  = def.monsterId,
+            HpMax      = isBoss ? Mathf.RoundToInt(def.hp  * 3.0f) : def.hp,
+            Hp         = isBoss ? Mathf.RoundToInt(def.hp  * 3.0f) : def.hp,
+            Atk        = isBoss ? Mathf.RoundToInt(def.atk * 1.8f) : def.atk,
+            Def        = isBoss ? Mathf.RoundToInt(def.def * 2.0f) : def.def,
+            CritChance = def.critChance,
+            CritMult   = def.critMult,
+            XpReward   = isBoss ? Mathf.RoundToInt(def.xpReward * 3.0f) : def.xpReward,
+        };
+        CurrentMonsterDef = def;
+        CurrentIsBoss = isBoss;
+        Debug.Log($"[GameLoop] Spawned enemy {Enemy.MonsterId} Lv{Enemy.Level} HP:{Enemy.Hp}/{Enemy.HpMax} ATK:{Enemy.Atk} DEF:{Enemy.Def} XP:{Enemy.XpReward}");
     }
 }

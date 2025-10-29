@@ -1,22 +1,23 @@
-using System;
-using System.Collections.Generic;
 using UnityEngine;
 
-[Serializable]
-public struct XpRow
-{
-    public int Level;
-    public int XpToNext;
-}
-
-[CreateAssetMenu(fileName = "XpTable", menuName = "InactiveRPG/Data/XpTable")]
+[CreateAssetMenu(fileName = "XpTable", menuName = "Game/Data/Xp Table")]
 public class XpTable : ScriptableObject
 {
-    public List<XpRow> rows;
+    [Tooltip("XP required to reach level (index). Entry 0 is unused; Entry 1 is XP to reach lvl 1 (usually 0).")]
+    public int[] xpToReachLevel = new int[] { 0, 0, 50, 150, 300, 500, 750, 1050 };
 
-    public int GetXpToNext(int level)
+    public int MaxLevel => (xpToReachLevel != null && xpToReachLevel.Length > 0) ? xpToReachLevel.Length - 1 : 1;
+
+    public int GetXpToReachLevel(int level)
     {
-        var row = rows.Find(r => r.Level == level);
-        return row.XpToNext;
+        if (xpToReachLevel == null || xpToReachLevel.Length == 0) return 0;
+        level = Mathf.Clamp(level, 0, MaxLevel);
+        return xpToReachLevel[level];
+    }
+
+    public int GetXpToNextLevel(int currentLevel)
+    {
+        if (currentLevel >= MaxLevel) return int.MaxValue; // cap
+        return GetXpToReachLevel(currentLevel + 1) - GetXpToReachLevel(currentLevel);
     }
 }

@@ -3,6 +3,7 @@ using UnityEngine;
 
 public enum MonsterTier { Normal, Elite, Boss }
 
+
 [CreateAssetMenu(menuName="RPG/Monster Def")]
 public class MonsterDef : ScriptableObject
 {
@@ -10,6 +11,7 @@ public class MonsterDef : ScriptableObject
     public string monsterId = "skeleton";
     public string displayName = "Skeleton";
     public MonsterTier tier = MonsterTier.Normal;
+    public GameObject prefab;
 
     [Header("Stats")]
     public int hp = 100;

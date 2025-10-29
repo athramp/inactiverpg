@@ -15,12 +15,13 @@ MonoBehaviour:
   monsterId: Eye
   displayName: Eye
   tier: 0
+  prefab: {fileID: 8539923866264311644, guid: 63adf03508fc56942983f778cc20d316, type: 3}
   hp: 80
   atk: 5
   def: 1
   critChance: 0.02
   critMult: 1.4
   xpReward: 6
-  baseScale: 20
+  baseScale: 2
   tint: {r: 1, g: 1, b: 1, a: 1}
   weight: 1

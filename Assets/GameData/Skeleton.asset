@@ -15,12 +15,13 @@ MonoBehaviour:
   monsterId: Skeleton
   displayName: Skeleton
   tier: 0
+  prefab: {fileID: 4662700295765893029, guid: f00e3e7e407304b43b49f8c4bf13e5d7, type: 3}
   hp: 160
   atk: 12
   def: 4
   critChance: 0.05
   critMult: 1.6
   xpReward: 12
-  baseScale: 20
+  baseScale: 2
   tint: {r: 1, g: 1, b: 1, a: 1}
   weight: 1

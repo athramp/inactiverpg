@@ -1,115 +1,84 @@
-// CampPanel.cs
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System.Threading.Tasks;
-using Firebase.Auth;
-using System.Collections.Generic;
 
 public class CampPanel : MonoBehaviour
 {
     [Header("UI")]
-    public TMP_Text NameText;
-    public Image ClassImage;
+    [SerializeField] TMP_Text NameText;
+    [SerializeField] Image ClassImage;
 
     [Header("Class Sprites")]
-    public Sprite WarriorSprite;
-    public Sprite MageSprite;
-    public Sprite ArcherSprite;
-    public Sprite UnknownSprite;
-        // CampPanel.cs (top of class)
-    [SerializeField] TMPro.TMP_Text LevelText;
-    [SerializeField] TMPro.TMP_Text HPText;
-    [SerializeField] TMPro.TMP_Text StatsText;
+    [SerializeField] Sprite WarriorSprite;
+    [SerializeField] Sprite MageSprite;
+    [SerializeField] Sprite ArcherSprite;
+    [SerializeField] Sprite UnknownSprite;
 
-    string ServerId => PlayerPrefs.GetString("serverId", "WindlessDesert18");
+    [Header("Player Stats (Live)")]
+    [SerializeField] TMP_Text LevelText;
+    [SerializeField] TMP_Text HPText;
+    [SerializeField] TMP_Text StatsText;
+
+    [Header("Sources")]
+    [SerializeField] CombatOrchestrator orchestrator; // assign in Inspector
+
+    void Awake()
+    {
+        if (!orchestrator) orchestrator = FindObjectOfType<CombatOrchestrator>();
+    }
 
     void OnEnable()
     {
-        _ = LoadAndBindAsync();
-        InvokeRepeating(nameof(UpdateRuntimeStats), 0.25f, 0.25f);
+        // try to show immediate info from GameLoop (no waiting on network)
+        PrimeHeaderFromGameLoop();
+        // keep the panel live, like CombatDebugPanel
+        InvokeRepeating(nameof(UpdateRuntimeStats), 0.2f, 0.2f);
     }
+
     void OnDisable()
     {
         CancelInvoke(nameof(UpdateRuntimeStats));
     }
-    async Task LoadAndBindAsync()
-{
-    await FirebaseGate.WaitUntilReady();
 
-    var uid = FirebaseAuth.DefaultInstance.CurrentUser?.UserId;
-    if (uid == null)
+    void PrimeHeaderFromGameLoop()
     {
-        if (NameText)   NameText.text = "Not signed in";
-        if (ClassImage) ClassImage.sprite = UnknownSprite;
-        if (LevelText)  LevelText.text = "";
-        if (HPText)     HPText.text = "";
-        if (StatsText)  StatsText.text = "";
-        return;
+        var loop = orchestrator ? orchestrator.gameLoop : null;
+        if (loop == null) return;
+
+        // Name (if you store one in GameLoop; else leave blank or “Hero”)
+        if (NameText)
+        {
+            var displayName = string.IsNullOrEmpty(loop.PlayerDisplayName) ? "Hero" : loop.PlayerDisplayName;
+            NameText.text = displayName;
+        }
+
+        // Class sprite from current player class
+        if (ClassImage && loop.Player != null)
+            ClassImage.sprite = SpriteForClass(loop.Player.ClassId);
     }
 
-    Dictionary<string, object> data = null;
-    try
+    void UpdateRuntimeStats()
     {
-        data = await CharacterService.GetAsync(ServerId, uid);
+        if (!orchestrator) return;
+
+        var eng  = orchestrator.DebugEngine;
+        var loop = orchestrator.gameLoop;
+        var prog = FindObjectOfType<PlayerProgression>();
+
+        if (loop?.Player == null) return;
+        if (NameText)
+    {
+        var n = string.IsNullOrEmpty(loop.PlayerDisplayName) ? "Hero" : loop.PlayerDisplayName;
+        if (NameText.text != n) NameText.text = n;
     }
-    catch (System.Exception e)
-    {
-        Debug.LogError($"CampPanel: failed to load character: {e}");
-    }
+        // Show level from PROGRESSION if available, otherwise from GameLoop
+        int level = prog != null ? prog.Level : loop.Player.Level;
+        if (LevelText) LevelText.text = $"Lv {level}";
 
-    if (data == null)
-    {
-        if (NameText)   NameText.text = "Create a character…";
-        if (ClassImage) ClassImage.sprite = UnknownSprite;
-        if (LevelText)  LevelText.text = "";
-        if (HPText)     HPText.text = "";
-        if (StatsText)  StatsText.text = "";
-        return;
-    }
-
-    string name = TryGetString(data, "name") ?? "Unknown";
-    string cls  = TryGetString(data, "class") ?? "warrior";
-
-    if (NameText)   NameText.text = name;
-    if (ClassImage) ClassImage.sprite = SpriteForClass(cls);
-
-    // Show saved values immediately (then live values will overwrite below)
-    int level = TryGetInt(data, "level") ?? 1;
-    int hp    = TryGetInt(data, "hp")    ?? 1;
-    if (LevelText) LevelText.text = $"Lv {level}";
-    if (HPText)    HPText.text    = $"HP {hp}";
-
-    // Try to bind live values if the loop is running
-    UpdateRuntimeStats();
-}
-
-void UpdateRuntimeStats()
-{
-    var gl = FindObjectOfType<GameLoopService>();
-    if (gl == null || !gl.IsInitialized || gl.Player == null) return;
-
-    var p = gl.Player;
-
-    if (LevelText) LevelText.text = $"Lv {p.Level}";
-    if (HPText)    HPText.text    = $"HP {p.Hp} / {p.MaxHp}";
-    if (StatsText) StatsText.text = $"ATK {p.Atk}  •  DEF {p.Def}";
-}
-
-int? TryGetInt(System.Collections.Generic.Dictionary<string, object> d, string key)
-{
-    if (d != null && d.TryGetValue(key, out var v) && v != null)
-    {
-        try { return System.Convert.ToInt32(v); } catch {}
-    }
-    return null;
-}
-
-    string TryGetString(Dictionary<string, object> dict, string key)
-    {
-        if (dict != null && dict.TryGetValue(key, out var value) && value != null)
-            return value.ToString();
-        return null;
+        // Live HP/ATK/DEF from GameLoopService (authoritative runtime stats)
+        var ps = loop.Player;
+        if (HPText)   HPText.text   = $"HP {ps.Hp}/{ps.MaxHp}";
+        if (StatsText) StatsText.text = $"ATK {ps.Atk}  •  DEF {ps.Def}";
     }
 
     Sprite SpriteForClass(string cls)

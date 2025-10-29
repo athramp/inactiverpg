@@ -12,44 +12,58 @@ public class CombatOrchestrator : MonoBehaviour
     [SerializeField] private bool enableDebug = true;
     [SerializeField] private float playerAttackRate = 2.5f;
     [SerializeField] private float enemyAttackRate  = 3.0f;
-
+    // Fields (assign via inspector)
+    [SerializeField] PlayerProgression playerProgression;  // <— add
+    [SerializeField] XpTable xpTable;                      // optional if PlayerProgression has it already
     private CombatEngine _engine;
 
     public CombatEngine DebugEngine => _engine; // used by debug panels
 
     private IEnumerator Start()
     {
-        // Wait for Firebase and GameLoop initialization
-        yield return new WaitUntil(() => gameLoop != null && gameLoop.IsInitialized && FirebaseGate.IsReady);
+        // Wait for Firebase + GameLoop ready
+        yield return new WaitUntil(() =>
+    gameLoop != null && gameLoop.IsInitialized && gameLoop.StatsReady && FirebaseGate.IsReady);
 
+        // Apply player class visuals
         visuals.ApplyPlayerClass(gameLoop.Player.ClassId);
 
-        // Seed engine state from your existing entities
-        var p = new FighterState {
+        // === Seed engine state from GameLoop data ===
+        var p = new FighterState
+        {
             Level = gameLoop.Player.Level,
             Hp = gameLoop.Player.Hp,
             MaxHp = gameLoop.Player.MaxHp,
             Atk = gameLoop.Player.Atk,
             Def = gameLoop.Player.Def,
-            Xp  = gameLoop.Player.CurrentXp
+            Xp = gameLoop.Player.CurrentXp
         };
+        Debug.Log($"[CombatOrchestrator] Player stats: Lv {p.Level} HP {p.Hp}/{p.MaxHp} ATK {p.Atk} DEF {p.Def} XP {p.Xp}");
         var e = new FighterState {
-            Level = gameLoop.Enemy.Level,
-            Hp = gameLoop.Enemy.Hp,
-            MaxHp = gameLoop.Enemy.HpMax,
-            Atk = gameLoop.Enemy.Atk,
-            Def = gameLoop.Enemy.Def
+            Level  = gameLoop.Enemy.Level,
+            Hp     = gameLoop.Enemy.Hp,
+            MaxHp  = gameLoop.Enemy.HpMax,
+            Atk    = gameLoop.Enemy.Atk,
+            Def    = gameLoop.Enemy.Def
         };
-
+        Debug.Log($"[CombatOrchestrator] Enemy stats: Lv {e.Level} HP {e.Hp}/{e.MaxHp} ATK {e.Atk} DEF {e.Def}");
         var cfg = new EngineConfig {
             PlayerAttackRateSec = playerAttackRate,
-            EnemyAttackRateSec  = enemyAttackRate,
-            XpRewardOnKill = 50 // TODO: replace with EnemyStats.XpReward
+            EnemyAttackRateSec  = enemyAttackRate
         };
 
         _engine = new CombatEngine(p, e, cfg, HandleEvent);
+        SyncEnginePlayerFromGameLoop();
+        // === XP reward from GameLoop ===
+        var xp = gameLoop.Enemy.XpReward;
+        _engine.Config.XpRewardOnKill = xp;
 
-        // Wire animation events to engine OnImpact, with range gating + cancel on reject
+        if (enableDebug)
+            Debug.Log($"[CombatOrchestrator] Engine initialized (XP reward {xp})");
+            // Spawn visuals for the data-selected def (no randomness in BVC)
+            visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
+
+        // === Hook animation impacts ===
         visuals.PlayerImpactEvent += () =>
         {
             if (visuals.playerAttackRange && visuals.enemyBody)
@@ -57,8 +71,8 @@ public class CombatOrchestrator : MonoBehaviour
                 var d = visuals.playerAttackRange.Distance(visuals.enemyBody).distance;
                 if (d > 0f)
                 {
-                    if (enableDebug) Debug.Log("[Combat] Player impact ignored (out of range) -> cancel");
-                    _engine.CancelPendingImpact(Side.Player);  // <<< important
+                    if (enableDebug) Debug.Log("[Combat] Player impact ignored (out of range) → cancel");
+                    _engine.CancelPendingImpact(Side.Player);
                     return;
                 }
             }
@@ -73,8 +87,8 @@ public class CombatOrchestrator : MonoBehaviour
                 var d = visuals.playerEngageZone.Distance(visuals.enemyBody).distance;
                 if (d > 0f)
                 {
-                    if (enableDebug) Debug.Log("[Combat] Enemy impact ignored (out of range) -> cancel");
-                    _engine.CancelPendingImpact(Side.Enemy);   // optional but symmetric
+                    if (enableDebug) Debug.Log("[Combat] Enemy impact ignored (out of range) → cancel");
+                    _engine.CancelPendingImpact(Side.Enemy);
                     return;
                 }
             }
@@ -83,11 +97,56 @@ public class CombatOrchestrator : MonoBehaviour
         };
 
         visuals.useEngineDrive = true;
+        // ----- Progression wiring -----
+        var prog = FindObjectOfType<PlayerProgression>();
+        if (prog)
+        {
+            // Initialize XP bar from progression
+            visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(prog.Level));
 
-        if (enableDebug)
-            Debug.Log("[CombatOrchestrator] Engine initialized.");
+            // Handle level-ups
+            prog.OnLevelUp += newLevel =>
+            {
+                Debug.Log($"[Progression] LEVEL UP → {newLevel}");
+
+                // 1) Recalculate player stats for the new level (and heal to full)
+                gameLoop.Player.ApplyLevelAndRecalculate(newLevel, healToFull: true);
+
+                // 2) Refresh UI immediately (HP + XP bar)
+                visuals.SetPlayerHp(gameLoop.Player.Hp, gameLoop.Player.MaxHp);
+                visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(newLevel));
+
+                // 3) Update the combat engine’s cached player state so combat uses new stats
+                _engine.UpdatePlayer(new FighterState {
+                    Level = gameLoop.Player.Level,
+                    Hp    = gameLoop.Player.Hp,
+                    MaxHp = gameLoop.Player.MaxHp,
+                    Atk   = gameLoop.Player.Atk,
+                    Def   = gameLoop.Player.Def,
+                    Xp    = prog.XpIntoLevel
+                });
+
+                // 4) Persist to Firebase
+                var ps = FindObjectOfType<PlayerPersistenceService>();
+                if (ps) _ = ps.SaveProgressAsync();
+            };
+
+
+        }
     }
 
+    private void SyncEnginePlayerFromGameLoop()
+{
+    if (_engine == null || gameLoop == null) return;
+    _engine.UpdatePlayer(new Core.Combat.FighterState {
+        Level = gameLoop.Player.Level,
+        Hp    = gameLoop.Player.Hp,
+        MaxHp = gameLoop.Player.MaxHp,
+        Atk   = gameLoop.Player.Atk,
+        Def   = gameLoop.Player.Def,
+        Xp    = gameLoop.Player.CurrentXp // or prog.XpIntoLevel if you prefer
+    });
+}
     private void Update()
     {
         if (_engine != null)
@@ -160,7 +219,9 @@ public class CombatOrchestrator : MonoBehaviour
                         Def = gameLoop.Enemy.Def
                     };
                     _engine.RespawnEnemy(ne);
-                    visuals.OnEnemyRespawned();
+                    // _engine.Config.XpRewardOnKill = gameLoop.Enemy.XpReward;
+                    // Spawn visuals for the newly selected def (keeps stats & visuals in sync)
+                    visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
                 }
                 else
                 {
@@ -173,10 +234,36 @@ public class CombatOrchestrator : MonoBehaviour
                 break;
 
             case CombatEventType.XpGained:
-                gameLoop.Player.GainXp(evt.Amount);
-                visuals.SetXp(gameLoop.Player.CurrentXp,
-                    gameLoop.XpTable.GetXpToNext(gameLoop.Player.Level));
+            {
+                var prog = FindObjectOfType<PlayerProgression>();
+                if (prog)
+                {
+                    prog.AddXp(evt.Amount);
+                    visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(prog.Level));
+                }
+                else
+                {
+                    // Fallback if progression missing (keeps current behavior)
+                    gameLoop.Player.GainXp(evt.Amount);
+                    visuals.SetXp(gameLoop.Player.CurrentXp,
+                        gameLoop.XpTable.GetXpToNextLevel(gameLoop.Player.Level));
+                }
+
+                // Persist (cheap; you also autosave)
+                var ps = FindObjectOfType<PlayerPersistenceService>();
+                if (ps)
+                {
+                    // ensure saved values reflect progression (level/xp)
+                    var pprog = prog; // capture
+                    if (pprog != null)
+                    {
+                        gameLoop.Player.Level    = pprog.Level;
+                        gameLoop.Player.CurrentXp = pprog.XpIntoLevel; // keep old schema
+                    }
+                    _ = ps.SaveProgressAsync();
+                }
                 break;
+            }
         }
     }
 }

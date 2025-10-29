@@ -15,12 +15,13 @@ MonoBehaviour:
   monsterId: Orc
   displayName: Orc
   tier: 1
-  hp: 10000
+  prefab: {fileID: 7165065568128235175, guid: 533fef513f957924e87c38e9bf59f838, type: 3}
+  hp: 100
   atk: 16
   def: 6
   critChance: 0.06
   critMult: 1.7
   xpReward: 15
-  baseScale: 40
+  baseScale: 2
   tint: {r: 1, g: 1, b: 1, a: 1}
   weight: 1

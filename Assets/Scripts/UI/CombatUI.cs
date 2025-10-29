@@ -28,7 +28,7 @@ public class CombatUI : MonoBehaviour
         PlayerHPBar.value = game.Player.Hp;
 
         // XP bar
-        int xpToNext = game.XpTable.GetXpToNext(game.Player.Level);
+        int xpToNext = game.XpTable.GetXpToNextLevel(game.Player.Level);
         PlayerXPBar.maxValue = xpToNext;
         PlayerXPBar.value = game.Player.CurrentXp;
 
