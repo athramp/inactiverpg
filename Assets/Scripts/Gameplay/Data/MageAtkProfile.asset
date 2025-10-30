@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea93c88189e67c043a49119fcfc9e5d8, type: 3}
   m_Name: MageAtkProfile
   m_EditorClassIdentifier: 
-  period: 1.2
-  windup: 1
+  period: 2
+  windup: 0.2
   kind: 3
-  reach: 1.5
-  projectileSpeed: 12
+  reach: 4
+  projectileSpeed: 5
   aoeRadius: 1
   targetCap: 1
   variance: 0

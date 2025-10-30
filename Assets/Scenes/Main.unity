@@ -2319,7 +2319,6 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1311893305}
-  - {fileID: 1336666326}
   - {fileID: 1254538757}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -5434,12 +5433,17 @@ MonoBehaviour:
   playerVisuals: {fileID: 11400000, guid: 0668c9e78c95b6e46b58882fcd0b8e27, type: 2}
   enableDebug: 1
   useEngineDrive: 1
-  playerEnemyGap: 0.5
-  approachSpeed: 0.5
+  playerEnemyGap: 4
+  approachSpeed: 5
   enemyHpBarPrefab: {fileID: 3517907691237384653, guid: e5be66af862a3884ca10b58e8b467e37, type: 3}
   playerEngageZone: {fileID: 1796866588}
   playerAttackRange: {fileID: 1364499296}
   playerBody: {fileID: 1796866588}
+  playerProjectilePrefab: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
+  playerMuzzle: {fileID: 1006085658}
+  enemyProjectilePrefab: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
+  enemyMuzzle: {fileID: 777667050}
+  projectileTrailSpeed: 5
   enemySpawnPoint: {fileID: 777667050}
   enemyParent: {fileID: 777667050}
   bossEvery: 10
@@ -5835,11 +5839,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_LocalScale.x
-      value: 30
+      value: 20
       objectReference: {fileID: 0}
     - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_LocalScale.y
-      value: 30
+      value: 20
       objectReference: {fileID: 0}
     - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_LocalPosition.x
@@ -5886,6 +5890,10 @@ PrefabInstance:
       value: 
       objectReference: {fileID: 9100000, guid: ee368a27d252d4a4d91fa95e20b7392b, type: 2}
     - target: {fileID: 4123634726342870495, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
+      propertyPath: visuals
+      value: 
+      objectReference: {fileID: 951330227}
+    - target: {fileID: 4123634726342870495, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: controller
       value: 
       objectReference: {fileID: 951330227}
@@ -5918,6 +5926,11 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
+--- !u!4 &1006085658 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 7143716695147933509, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
+  m_PrefabInstance: {fileID: 1006085657}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &1010851743
 GameObject:
   m_ObjectHideFlags: 0
@@ -9224,11 +9237,11 @@ Transform:
   m_GameObject: {fileID: 1336666325}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: -537.81146, y: -962.99054, z: 0.20301054}
-  m_LocalScale: {x: 2.6407883, y: 2.6407883, z: 2.6407883}
+  m_LocalPosition: {x: 0.79159546, y: -1.0688477, z: 0.07632868}
+  m_LocalScale: {x: 0.99289364, y: 0.99289364, z: 0.99289364}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 355464194}
+  m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1336666327
 MonoBehaviour:
@@ -9245,8 +9258,8 @@ MonoBehaviour:
   visuals: {fileID: 951330227}
   gameLoop: {fileID: 2042939935}
   enableDebug: 1
-  playerAttackRate: 0.5
-  enemyAttackRate: 1.5
+  playerAttackRate: 0
+  enemyAttackRate: 0
   warriorAttackProfile: {fileID: 11400000, guid: bf73141f02e5ff44b8bdec9416aafbdd, type: 2}
   mageAttackProfile: {fileID: 11400000, guid: ccf7ba3de8ea3d241bed452a5616689b, type: 2}
   archerAttackProfile: {fileID: 11400000, guid: 691f6fc662af3f14b96c8a9a102de740, type: 2}
@@ -14876,6 +14889,7 @@ SceneRoots:
   - {fileID: 1493050223}
   - {fileID: 2042939936}
   - {fileID: 1010851745}
+  - {fileID: 1336666326}
   - {fileID: 951330226}
   - {fileID: 355464194}
   - {fileID: 2026865681}

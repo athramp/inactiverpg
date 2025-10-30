@@ -14,6 +14,11 @@ public partial class BattleVisualController : MonoBehaviour
     public PlayerClassVisualMap playerVisuals;
     [Header("Debug")]
     [SerializeField] private bool enableDebug = false;
+    private bool playerIsRanged;
+private bool enemyIsRanged;
+
+public void SetPlayerRanged(bool v) => playerIsRanged = v;
+public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
 
     // ===== Engine / Orchestrator hooks (assigned by CombatOrchestrator) =====
     [Header("Engine/Orchestrator Hooks")]
@@ -33,7 +38,12 @@ public partial class BattleVisualController : MonoBehaviour
     public Collider2D playerEngageZone;    // already there
     public Collider2D playerAttackRange;   // already there
     public Collider2D playerBody;          // NEW (assign in Inspector; if none, assign playerEngageZone)
-
+    [Header("Ranged VFX")]
+    [SerializeField] private GameObject playerProjectilePrefab; // arrow/fireball
+    [SerializeField] private Transform  playerMuzzle;           // where it spawns from
+    [SerializeField] private GameObject enemyProjectilePrefab;
+    [SerializeField] private Transform  enemyMuzzle;
+    [SerializeField] private float      projectileTrailSpeed = 50f; // purely visual
     [Header("Enemy Spawning")]
     // [SerializeField] private GameObject[] enemyPrefabs; // Eye, Goblin, Mushroom, Orc, Skeleton, etc.
     [SerializeField] private Transform enemySpawnPoint; // spawn location (usually right side)
@@ -83,11 +93,6 @@ public partial class BattleVisualController : MonoBehaviour
     private Animator enemyAnimator;
     public Collider2D enemyBody;
     private Coroutine approachCo;
-    // private MonsterDef _currentDef;
-    // private bool _currentIsBoss;
-
-    // public MonsterDef CurrentMonsterDef => _currentDef;
-    // public bool CurrentIsBoss => _currentIsBoss;
     // ----------------- Public properties -----------------
     public float PlayerPosX => playerRoot ? playerRoot.position.x : 0f;
     public float EnemyPosX => _currentEnemy
@@ -103,26 +108,10 @@ public partial class BattleVisualController : MonoBehaviour
         enemyRoot = enemyParent ? enemyParent : transform;
         enemyRoot.localScale = Vector3.one;
     }
-/* REMOVED
-    private void OnEnable()
-    {
-        StartCoroutine(WaitForGameLoopAndSpawn());
-    }
-    private IEnumerator WaitForGameLoopAndSpawn()
-    {
-        // Wait until GameLoopService and Firebase are fully ready
-        yield return new WaitUntil(() =>
-            game != null &&
-            game.IsInitialized &&
-            FirebaseGate.IsReady &&
-            game.CurrentMonsterDef != null);
-
-        SpawnEnemyFromDef(game.CurrentMonsterDef, game.CurrentIsBoss);
-    }
-*/
     // ----------------- Player visuals API (called by orchestrator) -----------------
         public void TriggerPlayerAttack()
-        {
+    {   
+            Debug.Log("[BVC] TriggerPlayerAttack");
             if (!playerAnimator) return;
 
             if (HasState(playerAnimator, Player_AttackState))
@@ -139,7 +128,8 @@ public partial class BattleVisualController : MonoBehaviour
         }
 
         public void TriggerEnemyAttack()
-        {
+    {
+            
             if (!enemyAnimator) return;
 
             // Always restart the attack animation from the beginning
@@ -171,21 +161,11 @@ public partial class BattleVisualController : MonoBehaviour
         yield return new WaitForSeconds(0.6f); // allow death anim to show
         // Do NOT respawn here — Orchestrator will spawn the next enemy
     }
-    // public void OnPlayerDied() { HandlePlayerKilled(); }
     public void OnPlayerDied()
     {
         // Visuals only — DO NOT start any respawn or clear Dead here
         if (playerAnimator) SafeSetBool(playerAnimator, Param_DeadBool, true);
     }
-
-/* Redundant?
-    public void OnEnemyRespawned()
-    {
-        // ensure enemyBody points to the new enemy's collider
-        enemyBody = enemyRoot ? enemyRoot.GetComponentInChildren<Collider2D>() : null;
-        if (_enemyHpBar) _enemyHpBar.gameObject.SetActive(true);
-    } */
-    // public void OnPlayerRespawned() { /* no-op */ }
     public void OnPlayerRespawned()
     {
         if (playerAnimator) SafeSetBool(playerAnimator, Param_DeadBool, false);
@@ -202,18 +182,24 @@ public partial class BattleVisualController : MonoBehaviour
             if (HasState(playerAnimator, Player_IdleState)) SafePlay(playerAnimator, Player_IdleState, 0f);
         }
     }
+    // ----------------- Projectile VFX -----------------
+    private void SpawnAndFlyProjectile(Transform from, Vector3 to, GameObject prefab, float speed)
+    {
+        if (!prefab || from == null) return;
+        var go = Instantiate(prefab, from.position, Quaternion.identity, transform);
+        StartCoroutine(Fly(go.transform, to, speed));
+    }
 
+    private System.Collections.IEnumerator Fly(Transform t, Vector3 to, float speed)
+    {
+        while (t && (t.position - to).sqrMagnitude > 0.0004f)
+        {
+            t.position = Vector3.MoveTowards(t.position, to, speed * Time.deltaTime);
+            yield return null;
+        }
+        if (t) Destroy(t.gameObject);
+    }
     // ----------------- Spawning -----------------
-    // private GameObject PickRandomEnemyPrefab()
-    // {
-    //     if (enemyPrefabs == null || enemyPrefabs.Length == 0)
-    //     {
-    //         Debug.LogError("[Battle] No enemyPrefabs assigned on BattleVisualController.");
-    //         return null;
-    //     }
-    //     return enemyPrefabs[UnityEngine.Random.Range(0, enemyPrefabs.Length)];
-    // }
-
         public void SpawnEnemyFromDef(MonsterDef def, bool isBoss)
         {
             if (!def || !def.prefab)
@@ -284,13 +270,6 @@ public partial class BattleVisualController : MonoBehaviour
                     $"root scale={enemyRoot.lossyScale}");
         }
 
-
-
-    /// <summary>
-    /// Reads MonsterTag/MonsterDef from the spawned prefab, sets visual scale/tint,
-    /// and pushes stats into the game's enemy runtime (via reflection so your current
-    /// GameLoopService shape keeps compiling).
-    /// </summary>
     private void InitEnemyFromDef(GameObject enemyGO, bool isBoss)
 {
     if (!enemyGO) return;
@@ -387,7 +366,7 @@ public partial class BattleVisualController : MonoBehaviour
         while (true)
         {
             float gap = Mathf.Abs(playerRoot.position.x - enemyT.position.x);
-            Debug.Log($"[BVC] Approach gap: {gap:F2}m");
+            // Debug.Log($"[BVC] Approach gap: {gap:F2}m");
             if (gap <= playerEnemyGap) yield break;
 
             float dir = Mathf.Sign(playerRoot.position.x - enemyT.position.x);
@@ -398,124 +377,45 @@ public partial class BattleVisualController : MonoBehaviour
 
     // ----------------- Animation Events -----------------
 
-    /* OLD VERSION
         public void OnPlayerAttackImpact()
-        {
+    {
+        Debug.Log($"[BVC#{GetInstanceID()}] ENTRY OnPlayerAttackImpact drive={useEngineDrive}");
             if (!useEngineDrive) return;
 
-            Debug.Log("[BVC] Player impact event raised");
-
-            // Range gate (keep if you want contact-only melee)
-            if (playerAttackRange && enemyBody)
-            {
-                var d = playerAttackRange.Distance(enemyBody);
-                if (d.distance > 0f)
-                {
-                    Debug.Log("[Battle] Player impact ignored (out of range)");
-                    return;
-                }
+            // If ranged (projectileSpeed > 0), spawn projectile; otherwise keep your “Hit” reaction
+            // We can detect “ranged” by presence of prefab/muzzle
+            if (playerProjectilePrefab && playerMuzzle&& playerIsRanged)
+        {
+                Debug.Log("[BVC] OnPlayerAttackImpact - spawning projectile");
+                var target = _currentEnemy ? _currentEnemy.transform.position : enemySpawnPoint.position;
+                SpawnAndFlyProjectile(playerMuzzle, target, playerProjectilePrefab, projectileTrailSpeed);
             }
-
-            // Notify orchestrator/engine
-            PlayerImpactEvent?.Invoke();
-
-            // ENEMY HIT REACTION — do NOT interrupt enemy's attack animation
-            if (!IsInState(enemyAnimator, Enemy_AttackState))
+            else
             {
-                if (HasState(enemyAnimator, Enemy_HitState)) SafePlay(enemyAnimator, Enemy_HitState);
-                else SafeTrigger(enemyAnimator, Param_HitTrigger);
+            // melee VFX: cause target hit reaction immediately
+            if (enemyAnimator) { SafeTrigger(enemyAnimator, Param_HitTrigger); Debug.Log("[BVC] Triggered enemy hit reaction."); }
             }
         }
 
         public void OnEnemyAttackImpact()
-        {
+    {
+        Debug.Log($"[BVC#{GetInstanceID()}] ENTRY OnEnemyAttackImpact drive={useEngineDrive}");
             if (!useEngineDrive) return;
 
-            Debug.Log("[BVC] Enemy impact event raised");
-
-            // Range gate
-            if (playerEngageZone && enemyBody)
-            {
-                var d = playerEngageZone.Distance(enemyBody);
-                if (d.distance > 0f)
-                {
-                    Debug.Log("[Battle] Enemy impact ignored (out of range)");
-                    return;
-                }
+            if (enemyProjectilePrefab && enemyMuzzle && enemyIsRanged)
+        {
+                Debug.Log("[BVC] OnEnemyAttackImpact - spawning projectile");
+                var target = playerRoot ? playerRoot.position : transform.position;
+                SpawnAndFlyProjectile(enemyMuzzle, target, enemyProjectilePrefab, projectileTrailSpeed);
             }
-
-            // Notify orchestrator/engine
-            EnemyImpactEvent?.Invoke();
-
-            // Visual hit reaction on player (do NOT interrupt attack)
-            if (HasState(playerAnimator, Player_HitState)) SafePlay(playerAnimator, Player_HitState);
-            else if (!IsInState(playerAnimator, Player_AttackState))
-                SafeTrigger(playerAnimator, Param_HitTrigger);
-        } */
-        public void OnPlayerAttackImpact()
-        {
-            if (!useEngineDrive) return;
-
-            // purely visual now (sparks/slash sound); no collider checks, no engine calls
-            // e.g., PlaySlashFxAt(player weapon tip) if you have one
-
-            // Optional: enemy hit reaction (don’t interrupt enemy attack)
-            if (!IsInState(enemyAnimator, Enemy_AttackState))
+            else
             {
-                if (HasState(enemyAnimator, Enemy_HitState)) SafePlay(enemyAnimator, Enemy_HitState);
-                else SafeTrigger(enemyAnimator, Param_HitTrigger);
+                if (playerAnimator) {SafeTrigger(playerAnimator, Param_HitTrigger); Debug.Log("[BVC] Triggered player hit reaction."); }
             }
         }
-        public void OnEnemyAttackImpact()
-        {
-            if (!useEngineDrive) return;
-
-            // purely visual now (muzzle flash/slash); no collider checks, no engine calls
-
-            // Optional: player hit reaction (don’t interrupt player attack)
-            if (HasState(playerAnimator, Player_HitState)) SafePlay(playerAnimator, Player_HitState);
-            else if (!IsInState(playerAnimator, Player_AttackState))
-                SafeTrigger(playerAnimator, Param_HitTrigger);
-        }
 
 
-
-    // ----------------- Game events -----------------
-    // private void HandleEnemyKilled()
-    // {
-    //     if (enemyAnimator)
-    //     {
-    //         SafeSetBool(enemyAnimator, Param_DeadBool, true);
-    //         if (_enemyHpBar) _enemyHpBar.gameObject.SetActive(false);
-    //     }
-    //     StartCoroutine(EnemyDeathThenRespawn());
-    // }
-
-    // private IEnumerator EnemyDeathThenRespawn()
-    // {
-    //     yield return new WaitForSeconds(0.6f);
-    //     SpawnEnemyFromDef(game.CurrentMonsterDef, game.CurrentIsBoss);          // creates new enemy + new HP bar
-    //     StartApproach();
-    // }
-
-    // private void HandlePlayerKilled()
-    // {
-    //     if (playerAnimator) SafeSetBool(playerAnimator, Param_DeadBool, true);
-    //     StartCoroutine(PlayerRespawn());
-    // }
-
-    // private IEnumerator PlayerRespawn()
-    // {
-    //     yield return new WaitForSeconds(0.8f);
-
-    //     if (playerAnimator)
-    //     {
-    //         SafeSetBool(playerAnimator, Param_DeadBool, false);
-    //         if (HasState(playerAnimator, Player_IdleState))
-    //             SafePlay(playerAnimator, Player_IdleState, 0f);
-    //     }
-    // }
-
+    
     // ----------------- Animator helpers -----------------
     private static bool HasState(Animator anim, string stateName, int layer = 0)
     {
@@ -538,6 +438,7 @@ public partial class BattleVisualController : MonoBehaviour
 
     private static void SafeTrigger(Animator anim, string trigger)
     {
+        Debug.Log($"[BVC] SafeTrigger: {trigger}");
         if (!anim || string.IsNullOrEmpty(trigger)) return;
         anim.ResetTrigger(trigger);
         anim.SetTrigger(trigger);

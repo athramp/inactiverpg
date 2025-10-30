@@ -3,19 +3,18 @@ using UnityEngine;
 
 public class AnimEventRelay : MonoBehaviour
 {
-    public BattleVisualController controller;
-    public bool isPlayer = true;
+    public BattleVisualController visuals;
+    public bool enableAnimationEvents = true; // expose if you like
 
-    void Awake()
-    {
-        if (!controller) controller = FindObjectOfType<BattleVisualController>();
-    }
-
-    // This exact name goes into the Animation Event
+    // Called by the animation timeline
     public void AttackImpact()
     {
-        if (!controller) return;
-        if (isPlayer) controller.OnPlayerAttackImpact();
-        else          controller.OnEnemyAttackImpact();
+        // If visuals are engine-driven, do NOT relay
+        if (!enableAnimationEvents || (visuals && visuals.useEngineDrive)) return;
+
+        // Old behavior (only when not engine-driven)
+        if (visuals) visuals.OnPlayerAttackImpact();
     }
+
+    // Add similar guards for any other relayed events (AttackStart, Hit, etc.)
 }

@@ -13,10 +13,10 @@ MonoBehaviour:
   m_Name: EnemyAtkProfile
   m_EditorClassIdentifier: 
   period: 2
-  windup: 0.3
+  windup: 0
   kind: 0
-  reach: 0.5
-  projectileSpeed: 12
+  reach: 1.5
+  projectileSpeed: 0
   aoeRadius: 1
   targetCap: 1
   variance: 0

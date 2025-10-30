@@ -12,11 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea93c88189e67c043a49119fcfc9e5d8, type: 3}
   m_Name: WarriorAtkProfile 1
   m_EditorClassIdentifier: 
-  period: 1.2
-  windup: 0.3
+  period: 3
+  windup: 0
   kind: 0
-  reach: 0.5
-  projectileSpeed: 12
+  reach: 1.5
+  projectileSpeed: 0
   aoeRadius: 1
   targetCap: 1
   variance: 0

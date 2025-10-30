@@ -4,6 +4,31 @@ using System.Collections;
 
 public class CombatOrchestrator : MonoBehaviour
 {
+    // Singleton instance
+    private static CombatOrchestrator _instance;
+
+    void Awake()
+    {
+        if (_instance && _instance != this)
+        {
+            Debug.LogWarning($"[CO] Duplicate detected (old={_instance.GetInstanceID()}, new={GetInstanceID()}) — destroying new.");
+            Destroy(gameObject);
+            return;
+        }
+        _instance = this;
+        // Optional if you change scenes:
+        // DontDestroyOnLoad(gameObject);
+    }
+
+    void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+    }
+
+    // If you use Enter Play Mode Options (domain reload OFF):
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetStatic() => _instance = null;
+
     [Header("References")]
     public BattleVisualController visuals; // assign in inspector
     public GameLoopService gameLoop;       // existing owner of Player/Enemy/Class/XpTable
@@ -30,6 +55,7 @@ public class CombatOrchestrator : MonoBehaviour
 
     private IEnumerator Start()
     {
+        Debug.Log($"[CO] Started instance id={GetInstanceID()}");
         // Wait for Firebase + GameLoop ready
         yield return new WaitUntil(() =>
     gameLoop != null && gameLoop.IsInitialized && gameLoop.StatsReady && FirebaseGate.IsReady);
@@ -48,23 +74,29 @@ public class CombatOrchestrator : MonoBehaviour
             Xp = gameLoop.Player.CurrentXp
         };
         Debug.Log($"[CombatOrchestrator] Player stats: Lv {p.Level} HP {p.Hp}/{p.MaxHp} ATK {p.Atk} DEF {p.Def} XP {p.Xp}");
-        var e = new FighterState {
-            Level  = gameLoop.Enemy.Level,
-            Hp     = gameLoop.Enemy.Hp,
-            MaxHp  = gameLoop.Enemy.HpMax,
-            Atk    = gameLoop.Enemy.Atk,
-            Def    = gameLoop.Enemy.Def
+        var e = new FighterState
+        {
+            Level = gameLoop.Enemy.Level,
+            Hp = gameLoop.Enemy.Hp,
+            MaxHp = gameLoop.Enemy.HpMax,
+            Atk = gameLoop.Enemy.Atk,
+            Def = gameLoop.Enemy.Def
         };
         Debug.Log($"[CombatOrchestrator] Enemy stats: Lv {e.Level} HP {e.Hp}/{e.MaxHp} ATK {e.Atk} DEF {e.Def}");
-        var cfg = new EngineConfig {
+        var cfg = new EngineConfig
+        {
             PlayerAttackRateSec = playerAttackRate,
-            EnemyAttackRateSec  = enemyAttackRate
+            EnemyAttackRateSec = enemyAttackRate
         };
 
         _engine = new CombatEngine(p, e, cfg, HandleEvent);
         // === Assign attack profiles (from the Inspector or resources) ===
         _engine.PlayerAttack = GetPlayerAttackProfile();
-        _engine.EnemyAttack  = enemyAttackProfile;   // Drag this one in the Inspector
+        Debug.Log($"[CO] EnemyAttack projectileSpeed={_engine.EnemyAttack?.projectileSpeed}");
+        Debug.Log($"[CO] enemyIsRanged set to {(_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f}");
+        _engine.EnemyAttack = enemyAttackProfile;   // Drag this one in the Inspector
+        visuals.SetPlayerRanged((_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f);
+        visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
         SyncEnginePlayerFromGameLoop();
         // === XP reward from GameLoop ===
         var xp = gameLoop.Enemy.XpReward;
@@ -74,44 +106,10 @@ public class CombatOrchestrator : MonoBehaviour
         {
             Debug.Log($"[CombatOrchestrator] Engine initialized (XP reward {xp})");
         }
-            
+
         // Spawn visuals for the data-selected def (no randomness in BVC)
         visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
 
-        // === Hook animation impacts ===
-        /* REMOVED: 
-        visuals.PlayerImpactEvent += () =>
-        {
-            if (visuals.playerAttackRange && visuals.enemyBody)
-            {
-                var d = visuals.playerAttackRange.Distance(visuals.enemyBody).distance;
-                if (d > 0f)
-                {
-                    if (enableDebug) Debug.Log("[Combat] Player impact ignored (out of range) → cancel");
-                    _engine.CancelPendingImpact(Side.Player);
-                    return;
-                }
-            }
-            if (enableDebug) Debug.Log("[Combat] Player impact accepted");
-            _engine.OnImpact(Side.Player);
-        };
-
-        visuals.EnemyImpactEvent += () =>
-        {
-            if (visuals.playerEngageZone && visuals.enemyBody)
-            {
-                var d = visuals.playerEngageZone.Distance(visuals.enemyBody).distance;
-                if (d > 0f)
-                {
-                    if (enableDebug) Debug.Log("[Combat] Enemy impact ignored (out of range) → cancel");
-                    _engine.CancelPendingImpact(Side.Enemy);
-                    return;
-                }
-            }
-            if (enableDebug) Debug.Log("[Combat] Enemy impact accepted");
-            _engine.OnImpact(Side.Enemy);
-        };
-*/
         visuals.useEngineDrive = true;
         // ----- Progression wiring -----
         var prog = playerProgression;
@@ -134,7 +132,8 @@ public class CombatOrchestrator : MonoBehaviour
 
                 // 3) Update the combat engine’s cached player state so combat uses new stats
                 var currentPosX = _engine.Player.PosX;        // <— keep position
-                _engine.UpdatePlayer(new FighterState {
+                _engine.UpdatePlayer(new FighterState
+                {
                     Level = gameLoop.Player.Level,
                     Hp = gameLoop.Player.Hp,
                     MaxHp = gameLoop.Player.MaxHp,
@@ -151,6 +150,8 @@ public class CombatOrchestrator : MonoBehaviour
 
         }
     }
+    
+    
     private AttackProfile GetPlayerAttackProfile()
     {
         // Works for enum, string, or int class ids
@@ -201,29 +202,30 @@ public class CombatOrchestrator : MonoBehaviour
             _engine.Tick(Time.deltaTime);
         }
     }
-
+    private bool IsPlayerRanged() => (_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f;
+    private bool IsEnemyRanged() => (_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f;
     private void HandleEvent(in CombatEvent evt)
     {
+        Debug.Log($"[CO#{GetInstanceID()}] HandleEvent type={evt.Type} actor={evt.Actor}");
         if (enableDebug)
-            Debug.Log($"[EVT] {Time.time:F2} {evt.Type} {evt.Actor} amt={evt.Amount}");
-
+           
         switch (evt.Type)
         {
             case CombatEventType.AttackStarted:
                 if (evt.Actor == Side.Player)
-                {
-                    visuals.TriggerPlayerAttack();
+                {                    
+                    if (!IsPlayerRanged()) visuals.TriggerPlayerAttack();
                 }
                 else
                 {
-                    visuals.TriggerEnemyAttack();
+                    if (!IsEnemyRanged()) visuals.TriggerEnemyAttack();
                 }
                 break;
 
             case CombatEventType.DamageApplied:
                 // Update HP bars & data models
                 if (evt.Actor == Side.Player)
-                {
+                {                   
                     gameLoop.Enemy.Hp = _engine.Enemy.Hp;
                     visuals.SetEnemyHp(_engine.Enemy.Hp, _engine.Enemy.MaxHp);
                 }
@@ -234,103 +236,99 @@ public class CombatOrchestrator : MonoBehaviour
                 }
                 break;
             case CombatEventType.AttackImpact:
-                if (evt.Actor == Side.Player) visuals.OnPlayerAttackImpact();
-                else visuals.OnEnemyAttackImpact();
-                break;
-            /* old unit died
-            case CombatEventType.UnitDied:
-                if (evt.Actor == Side.Enemy)
+                try
+
                 {
-                    if (_enemyRespawning) break;
-                    _enemyRespawning = true;
-                    visuals.OnEnemyDied();
-                    visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-                    gameLoop.SpawnEnemy(); // create new enemy
-                    _engine.Config.XpRewardOnKill = gameLoop.Enemy.XpReward;
-                    var ne = new FighterState {
-                        Level = gameLoop.Enemy.Level,
-                        Hp = gameLoop.Enemy.Hp,
-                        MaxHp = gameLoop.Enemy.HpMax,
-                        Atk = gameLoop.Enemy.Atk,
-                        Def = gameLoop.Enemy.Def
-                    };
-                    _engine.RespawnEnemy(ne);                    
-                    // Spawn visuals for the newly selected def (keeps stats & visuals in sync)
-                    visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
-                }
-                else
-                {
-                    if (_playerRespawning) break;
-                    _playerRespawning = true;
-                    visuals.OnPlayerDied();
-                    gameLoop.Player.Hp = gameLoop.Player.MaxHp;
-                    _engine.Player.Hp  = _engine.Player.MaxHp;
-                    _engine.RespawnPlayer();
-                    visuals.OnPlayerRespawned();
-                }
-                break;
-*/
-            case CombatEventType.UnitDied:
-                if (evt.Actor == Side.Enemy)
-                {
-                    if (_enemyRespawning) break;
-                    _enemyRespawning = true;
-
-                    // Visuals: play death state now
-                    visuals.OnEnemyDied();
-
-                    // Optional: reflect that HP hit zero on the bar while it’s visible
-                    visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-
-                    // Delay the respawn logic so death anim can play
-                    StartCoroutine(EnemyRespawnRoutine());
-                }
-                else // Player died
-                {
-                    if (_playerRespawning) break;
-                    _playerRespawning = true;
-
-                    // Visuals: play death state now
-                    visuals.OnPlayerDied();
-
-                    // Delay the respawn logic so death anim can play
-                    StartCoroutine(PlayerRespawnRoutine());
-                }
-                break;
-
-            case CombatEventType.XpGained:
-                {
-                    var prog = playerProgression;
-                    if (prog)
+                    Debug.Log($"[CO] Started instance id={GetInstanceID()} "+ $"[CO] AttackImpact routed: {evt.Actor} t={Time.time:F2} (useEngineDrive={visuals.useEngineDrive})");
+                    // MARK A – prove we got past the first line
+                    Debug.Log("[CO] MARK A");
+                    if (evt.Actor == Side.Player)
                     {
-                        prog.AddXp(evt.Amount);
-                        visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(prog.Level));
+
+                        // MARK B – did we enter the Player branch?
+                        Debug.Log("[CO] MARK B Player");
+                        if (IsPlayerRanged()) { visuals.TriggerPlayerAttack(); }
+                        // MARK C – just before calling BVC
+                        Debug.Log("[CO] MARK C Player before impact");
+                        visuals.OnPlayerAttackImpact();
+                        // MARK D – after calling BVC
+                        Debug.Log("[CO] MARK D Player after impact");
                     }
                     else
-                    {
-                        // Fallback if progression missing (keeps current behavior)
-                        gameLoop.Player.GainXp(evt.Amount);
-                        visuals.SetXp(gameLoop.Player.CurrentXp,
-                            gameLoop.XpTable.GetXpToNextLevel(gameLoop.Player.Level));
+                    {   
+                        Debug.Log("[CO] MARK B Enemy");                        
+                        if (IsEnemyRanged()) { visuals.TriggerEnemyAttack(); }
+                        Debug.Log("[CO] MARK C Enemy before impact");
+                        visuals.OnEnemyAttackImpact();
+                        Debug.Log("[CO] MARK D Enemy after impact");
                     }
-
-                    // Persist (cheap; you also autosave)
-                    var ps = playerPersistenceService;
-                    if (ps)
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogError($"[CO] Exception in AttackImpact handling: {ex}");
+                }
+                break;
+            case CombatEventType.UnitDied:
+                    if (evt.Actor == Side.Enemy)
                     {
-                        // ensure saved values reflect progression (level/xp)
-                        var pprog = prog; // capture
-                        if (pprog != null)
-                        {
-                            gameLoop.Player.Level = pprog.Level;
-                            gameLoop.Player.CurrentXp = pprog.XpIntoLevel; // keep old schema
-                        }
-                        _ = ps.SaveProgressAsync();
+                        if (_enemyRespawning) break;
+                        _enemyRespawning = true;
+
+                        // Visuals: play death state now
+                        visuals.OnEnemyDied();
+
+                        // Optional: reflect that HP hit zero on the bar while it’s visible
+                        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
+                        visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
+                        // Delay the respawn logic so death anim can play
+                        StartCoroutine(EnemyRespawnRoutine());
+                    }
+                    else // Player died
+                    {
+                        if (_playerRespawning) break;
+                        _playerRespawning = true;
+
+                        // Visuals: play death state now
+                        visuals.OnPlayerDied();
+
+                        // Delay the respawn logic so death anim can play
+                        StartCoroutine(PlayerRespawnRoutine());
                     }
                     break;
+
+                case CombatEventType.XpGained:
+                    {
+                        var prog = playerProgression;
+                        if (prog)
+                        {
+                            prog.AddXp(evt.Amount);
+                            visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(prog.Level));
+                        }
+                        else
+                        {
+                            // Fallback if progression missing (keeps current behavior)
+                            gameLoop.Player.GainXp(evt.Amount);
+                            visuals.SetXp(gameLoop.Player.CurrentXp,
+                                gameLoop.XpTable.GetXpToNextLevel(gameLoop.Player.Level));
+                        }
+
+                        // Persist (cheap; you also autosave)
+                        var ps = playerPersistenceService;
+                        if (ps)
+                        {
+                            // ensure saved values reflect progression (level/xp)
+                            var pprog = prog; // capture
+                            if (pprog != null)
+                            {
+                                gameLoop.Player.Level = pprog.Level;
+                                gameLoop.Player.CurrentXp = pprog.XpIntoLevel; // keep old schema
+                            }
+                            _ = ps.SaveProgressAsync();
+                        }
+                        break;
+                    }
                 }
-        }
-    }
+                }
     private System.Collections.IEnumerator EnemyRespawnRoutine()
     {
         // Wait death phase

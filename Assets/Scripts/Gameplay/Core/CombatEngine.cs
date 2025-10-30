@@ -3,7 +3,7 @@ using System.Collections.Generic;
 namespace Core.Combat
 {
     public enum Side { Player, Enemy }
-
+    
     public struct FighterState
     {
         public int Level, Hp, MaxHp, Atk, Def, Xp;
@@ -31,6 +31,7 @@ namespace Core.Combat
 
     public sealed class CombatEngine
     {
+        private struct PendingImpact { public Side side; public float time; public bool isProjectileArrival; }
         public AttackProfile PlayerAttack; // NEW
         public AttackProfile EnemyAttack;  // NEW
         public FighterState Player;
@@ -43,15 +44,11 @@ namespace Core.Combat
         private bool _playerAwaitingImpact; // between AttackStarted and impact resolution
         private bool _enemyAwaitingImpact;
         private float Distance1D() => (float)System.Math.Abs(Player.PosX - Enemy.PosX);
-        private struct PendingImpact { public Side side; public float time; }
+        // private struct PendingImpact { public Side side; public float time; }
         private readonly List<PendingImpact> _impacts = new List<PendingImpact>();
 
         // awaiting-impact guards
         float _pAwaitTimer, _eAwaitTimer;
-
-        // NEW: allow exactly one impact per scheduled attack
-        // bool _playerAwaitingImpact, _enemyAwaitingImpact;
-        const float AWAIT_WINDOW = 1.0f;
         // === NEW: impact scheduler ===
         public delegate void EventSink(in CombatEvent e);
         readonly EventSink _emit;
@@ -89,7 +86,7 @@ namespace Core.Combat
                         _pAwaitTimer = 0f;
 
                         float tImpact = _now + (PlayerAttack != null ? System.Math.Max(0f, PlayerAttack.windup) : 0f);
-                        _impacts.Add(new PendingImpact { side = Side.Player, time = tImpact });
+                        _impacts.Add(new PendingImpact { side = Side.Player, time = tImpact, isProjectileArrival = false });
                         _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Player));
                     }
                 }
@@ -116,15 +113,44 @@ namespace Core.Combat
                         _eAwaitTimer = 0f;
 
                         float tImpact = _now + (EnemyAttack != null ? System.Math.Max(0f, EnemyAttack.windup) : 0f);
-                        _impacts.Add(new PendingImpact { side = Side.Enemy, time = tImpact });
+                        _impacts.Add(new PendingImpact { side = Side.Enemy, time = tImpact, isProjectileArrival = false });
                         _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Enemy));
                     }
                 }
             }
 
-            // 2) Optional timeouts (prevent stuck awaits)
-            if (_playerAwaitingImpact) { _pAwaitTimer += dt; if (_pAwaitTimer > AWAIT_WINDOW) { _playerAwaitingImpact = false; _pAwaitTimer = 0f; } }
-            if (_enemyAwaitingImpact)  { _eAwaitTimer += dt; if (_eAwaitTimer > AWAIT_WINDOW)  { _enemyAwaitingImpact  = false; _eAwaitTimer  = 0f; } }
+            // 2) Optional timeouts (prevent stuck awaits) — make them windup-aware
+            if (_playerAwaitingImpact)
+            {
+                _pAwaitTimer += dt;
+                // Allow at least windup + small slack; never cancel early
+                float pAllowed = ((PlayerAttack?.windup) ?? 0f) + 0.5f;        // 0.5s slack
+                // Also guard against extreme stalls: e.g., > 10s
+                float pHardCap = System.Math.Max(10f, pAllowed * 4f);
+
+                if (_pAwaitTimer > pHardCap)
+                {
+                    // Only then cancel the stuck await; DO NOT use tiny timeouts
+                    _playerAwaitingImpact = false;
+                    _pAwaitTimer = 0f;
+                    // Debug.Log("[Engine] Player await timed out (hard cap)"); // optional
+                }
+            }
+
+            if (_enemyAwaitingImpact)
+            {
+                _eAwaitTimer += dt;
+                float eAllowed = ((EnemyAttack?.windup) ?? 0f) + 0.5f;
+                float eHardCap = System.Math.Max(10f, eAllowed * 4f);
+
+                if (_eAwaitTimer > eHardCap)
+                {
+                    _enemyAwaitingImpact = false;
+                    _eAwaitTimer = 0f;
+                    // Debug.Log("[Engine] Enemy await timed out (hard cap)"); // optional
+                }
+            }
+
 
             // 3) Resolve due impacts (deterministic order: time then side)
             if (_impacts.Count > 1)
@@ -135,131 +161,71 @@ namespace Core.Combat
             {
                 var imp = _impacts[i];
                 _impacts.RemoveAt(i);
-                ResolveImpact(imp.side); // resolves; no dt here
+
+                if (imp.isProjectileArrival)
+                {
+                    // Apply delayed projectile damage on arrival
+                    if (imp.side == Side.Player)
+                    {
+                        int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
+                        Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
+                        _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
+                        if (Enemy.IsDead)
+                        {
+                            _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
+                            Player.Xp += Config.XpRewardOnKill;
+                            _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
+                        }
+                    }
+                    else // Enemy projectile arrival
+                    {
+                        int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
+                        Player.Hp = System.Math.Max(0, Player.Hp - dmg);
+                        _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
+                        if (Player.IsDead)
+                        {
+                            _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+                        }
+                    }
+                }
+                else
+                {
+                    // Melee/hitscan impact (or projectile spawn moment handled in ResolveImpact)
+                    ResolveImpact(imp.side);
+                }
             }
         }
 
-            public void UpdateEnemy(FighterState s) { Enemy = s; }
-            private void ResolveImpact(Side side)
-            {
-                if (Player.IsDead || Enemy.IsDead) return;
 
-                if (side == Side.Player)
-                {
-                    _playerAwaitingImpact = false;
-                    _pAwaitTimer = 0f;
-
-                    float reach = (PlayerAttack != null ? PlayerAttack.reach : 1.5f);
-                    bool inReach = Distance1D() <= reach;
-
-                    if (!inReach) return; // silent whiff (no AttackImpact)
-
-                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
-
-                    int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-                    Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
-                    _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
-
-                    if (Enemy.IsDead)
-                    {
-                        _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                        Player.Xp += Config.XpRewardOnKill;
-                        _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
-                    }
-                }
-                else // Enemy
-                {
-                    _enemyAwaitingImpact = false;
-                    _eAwaitTimer = 0f;
-
-                    float reach = (EnemyAttack != null ? EnemyAttack.reach : 1.5f);
-                    bool inReach = Distance1D() <= reach;
-
-                    if (!inReach) return; // silent whiff
-
-                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
-
-                    int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-                    Player.Hp = System.Math.Max(0, Player.Hp - dmg);
-                    _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
-
-                    if (Player.IsDead)
-                    {
-                        _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
-                    }
-                }
-            }
-
-
-
-        /* OLD TICK METHOD
-                public void Tick(float dt)
-                {
-                    // schedule attacks
-                    if (!Player.IsDead && !Enemy.IsDead)
-                    {
-                        _pTimer += dt;
-                        if (_pTimer >= Config.PlayerAttackRateSec && !_playerAwaitingImpact)
-                        {
-                            _pTimer -= Config.PlayerAttackRateSec;
-                            _playerAwaitingImpact = true;
-                            _pAwaitTimer = 0f;                     // reset window
-                            _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Player));
-                        }
-
-                        _eTimer += dt;
-                        if (_eTimer >= Config.EnemyAttackRateSec && !_enemyAwaitingImpact)
-                        {
-                            _eTimer -= Config.EnemyAttackRateSec;
-                            _enemyAwaitingImpact = true;
-                            _eAwaitTimer = 0f;                     // reset window
-                            _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Enemy));
-                        }
-                    }
-
-                    // impact window timeout (prevents permanent stalls if impact never arrives)
-                    if (_playerAwaitingImpact)
-                    {
-                        _pAwaitTimer += dt;
-                        if (_pAwaitTimer > AWAIT_WINDOW)
-                        {
-                            _playerAwaitingImpact = false;
-                            _pAwaitTimer = 0f;
-                            // (optional) _emit(new CombatEvent(CombatEventType.AttackCanceled, Side.Player));
-                        }
-                    }
-                    if (_enemyAwaitingImpact)
-                    {
-                        _eAwaitTimer += dt;
-                        if (_eAwaitTimer > AWAIT_WINDOW)
-                        {
-                            _enemyAwaitingImpact = false;
-                            _eAwaitTimer = 0f;
-                            // (optional) _emit(new CombatEvent(CombatEventType.AttackCanceled, Side.Enemy));
-                        }
-                    }
-                } */
-        public void UpdatePlayer(FighterState s) { Player = s; }
-        public void CancelPendingImpact(Side s)
+        public void UpdateEnemy(FighterState s) { Enemy = s; }
+        private void ResolveImpact(Side side)
         {
-            if (s == Side.Player) _playerAwaitingImpact = false;
-            else _enemyAwaitingImpact = false;
-        }
+            if (Player.IsDead || Enemy.IsDead) return;
 
-        // Call when the animation's hit frame happens:
-        [System.Obsolete("Engine now resolves impacts internally on schedule; visuals must not call OnImpact.")]
-        public void OnImpact(Side attacker)
-        { /* DEPRECATED: see ResolveImpact above 
-            if (attacker == Side.Player)
+            if (side == Side.Player)
             {
-                if (!_playerAwaitingImpact || Player.IsDead || Enemy.IsDead) return;
-                _playerAwaitingImpact = false; // consume token
+                _playerAwaitingImpact = false;
                 _pAwaitTimer = 0f;
-                // DEBUG: print exact numbers engine is using
-                UnityEngine.Debug.Log($"[DMGDBG] Player atk={Player.Atk}  vs Enemy def={Enemy.Def}");
+
+                float reach = (PlayerAttack != null ? PlayerAttack.reach : 1.5f);
+                bool inReach = Distance1D() <= reach;
+                if (!inReach) return; // silent whiff
+
+                float projSpeed = (PlayerAttack != null ? PlayerAttack.projectileSpeed : 0f);
+                if (projSpeed > 0f)
+                {
+                    // Spawn projectile VFX now
+                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
+                    // Schedule damage on arrival
+                    float flight = Distance1D() / System.Math.Max(0.01f, projSpeed);
+                    _impacts.Add(new PendingImpact { side = Side.Player, time = _now + flight, isProjectileArrival = true });
+                    return;
+                }
+
+                // Melee / hitscan: apply now
+                _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
                 int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
                 Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
-                _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
                 _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
                 if (Enemy.IsDead)
                 {
@@ -270,20 +236,40 @@ namespace Core.Combat
             }
             else // Enemy
             {
-                if (!_enemyAwaitingImpact || Enemy.IsDead || Player.IsDead) return;
-                _enemyAwaitingImpact = false; // consume token
+                _enemyAwaitingImpact = false;
                 _eAwaitTimer = 0f;
-                UnityEngine.Debug.Log($"[DMGDBG] Enemy atk={Enemy.Atk}  vs Player def={Player.Def}");
+
+                float reach = (EnemyAttack != null ? EnemyAttack.reach : 1.5f);
+                bool inReach = Distance1D() <= reach;
+                if (!inReach) return;
+
+                float projSpeed = (EnemyAttack != null ? EnemyAttack.projectileSpeed : 0f);
+                if (projSpeed > 0f)
+                {
+                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
+                    float flight = Distance1D() / System.Math.Max(0.01f, projSpeed);
+                    _impacts.Add(new PendingImpact { side = Side.Enemy, time = _now + flight, isProjectileArrival = true });
+                    return;
+                }
+
+                _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
                 int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
                 Player.Hp = System.Math.Max(0, Player.Hp - dmg);
-                _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
                 _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
                 if (Player.IsDead)
                 {
                     _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
                 }
-            } */
+            }
         }
+
+        public void UpdatePlayer(FighterState s) { Player = s; }
+        public void CancelPendingImpact(Side s)
+        {
+            if (s == Side.Player) _playerAwaitingImpact = false;
+            else _enemyAwaitingImpact = false;
+        }
+
 
         public void RespawnEnemy(FighterState newEnemy)
         {
