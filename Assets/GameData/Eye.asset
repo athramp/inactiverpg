@@ -22,6 +22,6 @@ MonoBehaviour:
   critChance: 0.02
   critMult: 1.4
   xpReward: 6
-  baseScale: 2
+  baseScale: 20
   tint: {r: 1, g: 1, b: 1, a: 1}
   weight: 1

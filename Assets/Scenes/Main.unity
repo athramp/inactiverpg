@@ -4042,7 +4042,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: -10, y: 0}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &746466118
@@ -5434,12 +5434,14 @@ MonoBehaviour:
   playerVisuals: {fileID: 11400000, guid: 0668c9e78c95b6e46b58882fcd0b8e27, type: 2}
   enableDebug: 1
   useEngineDrive: 1
+  playerEnemyGap: 0.5
+  approachSpeed: 0.5
   enemyHpBarPrefab: {fileID: 3517907691237384653, guid: e5be66af862a3884ca10b58e8b467e37, type: 3}
   playerEngageZone: {fileID: 1796866588}
   playerAttackRange: {fileID: 1364499296}
   playerBody: {fileID: 1796866588}
   enemySpawnPoint: {fileID: 777667050}
-  enemyParent: {fileID: 0}
+  enemyParent: {fileID: 777667050}
   bossEvery: 10
   bossScaleFactor: 1.25
   bossTint: {r: 1, g: 0, b: 0, a: 1}
@@ -5832,8 +5834,16 @@ PrefabInstance:
       value: Soldier
       objectReference: {fileID: 0}
     - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 30
+      objectReference: {fileID: 0}
+    - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_LocalPosition.x
-      value: -2
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2782902937613293467, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_LocalPosition.y
@@ -8359,7 +8369,6 @@ GameObject:
   - component: {fileID: 1254538757}
   - component: {fileID: 1254538760}
   - component: {fileID: 1254538759}
-  - component: {fileID: 1254538758}
   - component: {fileID: 1254538761}
   m_Layer: 5
   m_Name: UIRoot
@@ -8392,18 +8401,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1254538758
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1254538756}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4f4370f0c4383a04d88ea39bdfc5d631, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!114 &1254538759
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9250,8 +9247,15 @@ MonoBehaviour:
   enableDebug: 1
   playerAttackRate: 0.5
   enemyAttackRate: 1.5
+  warriorAttackProfile: {fileID: 11400000, guid: bf73141f02e5ff44b8bdec9416aafbdd, type: 2}
+  mageAttackProfile: {fileID: 11400000, guid: ccf7ba3de8ea3d241bed452a5616689b, type: 2}
+  archerAttackProfile: {fileID: 11400000, guid: 691f6fc662af3f14b96c8a9a102de740, type: 2}
+  enemyAttackProfile: {fileID: 11400000, guid: 3df3bf3c462e98a4090754ab8b46453f, type: 2}
   playerProgression: {fileID: 1010851744}
+  playerPersistenceService: {fileID: 2042939938}
   xpTable: {fileID: 11400000, guid: ce363ec56591c814a8b6f5519bb5689c, type: 2}
+  enemyDeathDelay: 3
+  playerDeathDelay: 3
 --- !u!61 &1364499296 stripped
 BoxCollider2D:
   m_CorrespondingSourceObject: {fileID: 5336431512459618746, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
@@ -13961,11 +13965,7 @@ MonoBehaviour:
   classCatalog: {fileID: 11400000, guid: c96cde6256e5669429be83d749f381de, type: 2}
   xpTable: {fileID: 11400000, guid: ce363ec56591c814a8b6f5519bb5689c, type: 2}
   monsterCatalog:
-  - {fileID: 11400000, guid: 550203fb71e817748a84bdce0b8474d2, type: 2}
-  - {fileID: 11400000, guid: 38f427c36c2152e4ba6f0a511d5fb757, type: 2}
   - {fileID: 11400000, guid: d017a99423bb7d340abc23ba817277bf, type: 2}
-  - {fileID: 11400000, guid: b8ce3bbebe32dee40b1bbe51466ae52c, type: 2}
-  - {fileID: 11400000, guid: 5a042fd68cb3e474aa6af0a16989ef87, type: 2}
   persistence: {fileID: 2042939938}
   bossEvery: 5
 --- !u!4 &2042939936
