@@ -5427,7 +5427,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3534e0b89517c00499a99b4d69ff2b33, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  game: {fileID: 2042939935}
   playerRoot: {fileID: 711395117}
   playerAnimator: {fileID: 2132338263}
   playerVisuals: {fileID: 11400000, guid: 0668c9e78c95b6e46b58882fcd0b8e27, type: 2}
@@ -5907,7 +5906,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7143716695147933509, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.03
+      value: 0.06
       objectReference: {fileID: 0}
     - target: {fileID: 8721548430763948524, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_Size.x
@@ -13980,7 +13979,7 @@ MonoBehaviour:
   monsterCatalog:
   - {fileID: 11400000, guid: d017a99423bb7d340abc23ba817277bf, type: 2}
   persistence: {fileID: 2042939938}
-  bossEvery: 2
+  bossEvery: 5
 --- !u!4 &2042939936
 Transform:
   m_ObjectHideFlags: 0

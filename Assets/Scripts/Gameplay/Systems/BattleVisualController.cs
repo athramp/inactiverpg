@@ -8,13 +8,14 @@ using UnityEngine.UI;
 public partial class BattleVisualController : MonoBehaviour
 {
     [Header("Scene Refs")]
-    public GameLoopService game;           // drag your GameRoot (GameLoopService) here
     public Transform playerRoot;           // where your player sprite sits
     public Animator playerAnimator;        // player's Animator
     public PlayerClassVisualMap playerVisuals;
     [Header("Debug")]
     [SerializeField] private bool enableDebug = false;
     private bool playerIsRanged;
+    private int _cachedEnemyHp;
+    private int _cachedEnemyHpMax;
 private bool enemyIsRanged;
 
 public void SetPlayerRanged(bool v) => playerIsRanged = v;
@@ -22,7 +23,7 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
 
     // ===== Engine / Orchestrator hooks (assigned by CombatOrchestrator) =====
     [Header("Engine/Orchestrator Hooks")]
-    public bool useEngineDrive = false; // when true, the engine controls attack timing
+    public bool useEngineDrive = true; // when true, the engine controls attack timing
 
     [Header("Approach Tuning")]
     [SerializeField] private float playerEnemyGap = 0.5f; // meters to stop at (tune this)
@@ -41,8 +42,7 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     [SerializeField] private GameObject enemyProjectilePrefab;
     [SerializeField] private Transform  enemyMuzzle;
     [SerializeField] private float      projectileTrailSpeed = 50f; // purely visual
-    [Header("Enemy Spawning")]
-    // [SerializeField] private GameObject[] enemyPrefabs; // Eye, Goblin, Mushroom, Orc, Skeleton, etc.
+    [Header("Enemy Spawning")]   
     [SerializeField] private Transform enemySpawnPoint; // spawn location (usually right side)
     [SerializeField] private Transform enemyParent;     // optional parent for cleanliness
 
@@ -50,14 +50,6 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     // [SerializeField] private int bossEvery = 10;          // every N kills spawn a boss
     [SerializeField] private float bossScaleFactor = 1.25f;
     [SerializeField] private Color bossTint = Color.red;
-
-    // [Header("Positions & Speed")]
-    // //public Transform engagePoint;          // where enemy should stand when engaged
-    // public float enemyMoveSpeed = 2.5f;
-
-    // [Header("Timings")]
-    // public float playerAttackRate = 1.0f;
-    // public float enemyAttackRate = 1.2f;
 
     [Header("Animator Parameters (Triggers/Bools)")]
     public string Param_AttackTrigger = "Attack";
@@ -84,7 +76,6 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     private GameObject _currentEnemy;
     private SpriteRenderer _currentEnemySR;
     private Animator _currentEnemyAnimator;
-    private Vector3 _enemyBaseScale = Vector3.one;
 
     private Transform enemyRoot;
     private Animator enemyAnimator;
@@ -98,7 +89,6 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     // ----------------- Unity lifecycle -----------------
     void Awake()
     {
-        if (!game) game = FindObjectOfType<GameLoopService>();
         if (!playerAnimator) Debug.LogWarning("[BVC] Player Animator not assigned.");
 
         // Ensure a valid, unscaled parent for enemies
@@ -140,6 +130,8 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
 
     public void SetEnemyHp(int hp, int max)
     {
+        _cachedEnemyHp = hp;
+        _cachedEnemyHpMax = max;
         if (_enemyHpBar)
         {
             _enemyHpBar.maxValue = max;
@@ -254,8 +246,8 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
 
                 var barGo = Instantiate(enemyHpBarPrefab, _currentEnemy.transform);
                 _enemyHpBar = barGo.GetComponentInChildren<Slider>(true);
-                _enemyHpBar.maxValue = game.Enemy.HpMax;
-                _enemyHpBar.value    = game.Enemy.Hp;
+                _enemyHpBar.maxValue = _cachedEnemyHpMax > 0 ? _cachedEnemyHpMax : 1;
+                _enemyHpBar.value    = _cachedEnemyHpMax > 0 ? _cachedEnemyHp     : 1;
             }
 
             // --- Start approach movement (purely visual) ---
@@ -290,43 +282,6 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     if (_currentEnemySR)
         _currentEnemySR.color = isBoss ? bossTint : d.tint;
 }
-
-    // Reflection helpers (used by InitEnemyFromDef) unused for now
-    private static void TrySetMember(object obj, string name, object value)
-    {
-        if (obj == null) return;
-        var t = obj.GetType();
-
-        var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (f != null)
-        {
-            if (value != null && f.FieldType != value.GetType()) value = ConvertValue(value, f.FieldType);
-            f.SetValue(obj, value);
-            return;
-        }
-
-        var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (p != null && p.CanWrite)
-        {
-            if (value != null && p.PropertyType != value.GetType()) value = ConvertValue(value, p.PropertyType);
-            p.SetValue(obj, value, null);
-        }
-    }
-
-    private static object TryGetMember(object obj, string name)
-    {
-        if (obj == null) return null;
-        var t = obj.GetType();
-
-        var f = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (f != null) return f.GetValue(obj);
-
-        var p = t.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (p != null && p.CanRead) return p.GetValue(obj, null);
-
-        return null;
-    }
-
     private static object ConvertValue(object value, Type targetType)
     {
         try
@@ -447,11 +402,4 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
         anim.SetBool(param, value);
 
     }
-    private bool IsInState(Animator anim, string stateName)
-{
-    if (!anim) return false;
-    var st = anim.GetCurrentAnimatorStateInfo(0);
-    return st.IsName(stateName);
-}
-
 }

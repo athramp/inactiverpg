@@ -97,18 +97,14 @@ public class CombatOrchestrator : MonoBehaviour
         _engine.EnemyAttack = enemyAttackProfile;   // Drag this one in the Inspector
         visuals.SetPlayerRanged((_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f);
         visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
-        SyncEnginePlayerFromGameLoop();
+        SyncEngineFromGameLoop();
         // === XP reward from GameLoop ===
         var xp = gameLoop.Enemy.XpReward;
         _engine.Config.XpRewardOnKill = xp;
-
-        if (enableDebug)
-        {
-            Debug.Log($"[CombatOrchestrator] Engine initialized (XP reward {xp})");
-        }
-
         // Spawn visuals for the data-selected def (no randomness in BVC)
+        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
         visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
+
 
         visuals.useEngineDrive = true;
         // ----- Progression wiring -----
@@ -174,18 +170,54 @@ public class CombatOrchestrator : MonoBehaviour
     }
 
 
-    private void SyncEnginePlayerFromGameLoop()
-{
-    if (_engine == null || gameLoop == null) return;
-    _engine.UpdatePlayer(new Core.Combat.FighterState {
-        Level = gameLoop.Player.Level,
-        Hp    = gameLoop.Player.Hp,
-        MaxHp = gameLoop.Player.MaxHp,
-        Atk   = gameLoop.Player.Atk,
-        Def   = gameLoop.Player.Def,
-        Xp    = gameLoop.Player.CurrentXp // or prog.XpIntoLevel if you prefer
-    });
-}
+    private void SyncEngineFromGameLoop()
+    {
+        if (_engine == null || gameLoop == null) return;
+
+        // Player
+        _engine.UpdatePlayer(new Core.Combat.FighterState
+        {
+            Level = gameLoop.Player.Level,
+            Hp = gameLoop.Player.Hp,
+            MaxHp = gameLoop.Player.MaxHp,
+            Atk = gameLoop.Player.Atk,
+            Def = gameLoop.Player.Def,
+            Xp = gameLoop.Player.CurrentXp
+        });
+
+        // Enemy
+        _engine.UpdateEnemy(new Core.Combat.FighterState
+        {
+            Level = gameLoop.Enemy.Level,
+            Hp = gameLoop.Enemy.Hp,
+            MaxHp = gameLoop.Enemy.HpMax,
+            Atk = gameLoop.Enemy.Atk,
+            Def = gameLoop.Enemy.Def
+        });
+    }
+    private void SyncGameLoopFromEngine()
+    {
+        if (_engine == null || gameLoop == null) return;
+
+        // Player
+        gameLoop.Player.Level = _engine.Player.Level;
+        gameLoop.Player.Hp    = _engine.Player.Hp;
+        // gameLoop.Player.MaxHp = _engine.Player.MaxHp;
+        gameLoop.Player.Atk   = _engine.Player.Atk;
+        gameLoop.Player.Def   = _engine.Player.Def;
+        // If you store XP on engine, mirror that too:
+        gameLoop.Player.CurrentXp = _engine.Player.Xp;
+
+        // Enemy
+        gameLoop.Enemy.Level = _engine.Enemy.Level;
+        gameLoop.Enemy.Hp    = _engine.Enemy.Hp;
+        // gameLoop.Enemy.HpMax = _engine.Enemy.MaxHp;
+        gameLoop.Enemy.Atk   = _engine.Enemy.Atk;
+        gameLoop.Enemy.Def   = _engine.Enemy.Def;
+
+        // Optional: notify persistence/UI layers
+        // gameLoop.OnCombatSynced?.Invoke();
+    }
     private void Update()
     {
         if (_engine == null || visuals == null) return;
@@ -224,16 +256,9 @@ public class CombatOrchestrator : MonoBehaviour
 
             case CombatEventType.DamageApplied:
                 // Update HP bars & data models
-                if (evt.Actor == Side.Player)
-                {                   
-                    gameLoop.Enemy.Hp = _engine.Enemy.Hp;
-                    visuals.SetEnemyHp(_engine.Enemy.Hp, _engine.Enemy.MaxHp);
-                }
-                else
-                {
-                    gameLoop.Player.Hp = _engine.Player.Hp;
-                    visuals.SetPlayerHp(_engine.Player.Hp, _engine.Player.MaxHp);
-                }
+                SyncGameLoopFromEngine();
+                visuals.SetPlayerHp(gameLoop.Player.Hp, gameLoop.Player.MaxHp);
+                visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
                 break;
             case CombatEventType.AttackImpact:
                 try
@@ -260,11 +285,12 @@ public class CombatOrchestrator : MonoBehaviour
                         if (_enemyRespawning) break;
                         _enemyRespawning = true;
                         // Visuals: play death state now
+                        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
+                        visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
                         visuals.OnEnemyDied();
 
                         // Optional: reflect that HP hit zero on the bar while it’s visible
-                        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-                        visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
+
                         // Delay the respawn logic so death anim can play
                         StartCoroutine(EnemyRespawnRoutine());
                     }
@@ -327,16 +353,16 @@ public class CombatOrchestrator : MonoBehaviour
         var ne = new FighterState {
             Level = gameLoop.Enemy.Level,
             Hp    = gameLoop.Enemy.Hp,
-            MaxHp = gameLoop.Enemy.HpMax,
+            // MaxHp = gameLoop.Enemy.HpMax,
             Atk   = gameLoop.Enemy.Atk,
             Def   = gameLoop.Enemy.Def
             // PosX will be fed from visuals in Update() as usual
         };
         _engine.RespawnEnemy(ne);
-
+        SyncGameLoopFromEngine(); // keep GameLoop in sync
         // Spawn visuals for the newly selected def (keeps stats & visuals in sync)
         visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
-
+        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
         _enemyRespawning = false;
     }
 
@@ -350,10 +376,16 @@ public class CombatOrchestrator : MonoBehaviour
         // If you manually touched _engine.Player.Hp before, that’s no longer needed here,
         // RespawnPlayer() will ensure the engine-side snapshot is alive:
         _engine.RespawnPlayer();
-
+        SyncGameLoopFromEngine();
         visuals.OnPlayerRespawned();
 
         _playerRespawning = false;
     }
-
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+private void AssertEngineIsAuthoritative()
+{
+    // Example heuristic: engine values must match gameLoop right after a sync-tick
+    if (gameLoop.Player.Hp != _engine.Player.Hp || gameLoop.Enemy.Hp != _engine.Enemy.Hp)
+        Debug.LogWarning("[CO] Detected desync between engine and game loop — check for direct writes.");
+}
 }

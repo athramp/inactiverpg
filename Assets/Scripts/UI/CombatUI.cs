@@ -8,6 +8,7 @@ public class CombatUI : MonoBehaviour
     public Slider EnemyHPBar;
 
     private GameLoopService game;
+    
 
     void Start()
     {

@@ -29,12 +29,7 @@ public class GameLoopService : MonoBehaviour
     [Header("Boss Rules")]
     [SerializeField] private int bossEvery = 5;  // spawn boss every 10 enemies
     private int _enemySpawnCount = 0;
-    public void BeginEngagement()
-{
-    if (IsEngaged) return;
-    IsEngaged = true;
-    Debug.Log("[GameLoop] Engagement started");
-}
+
 
 private void Awake()
 {
