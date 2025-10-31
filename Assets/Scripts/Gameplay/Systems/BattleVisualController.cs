@@ -24,9 +24,6 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     [Header("Engine/Orchestrator Hooks")]
     public bool useEngineDrive = false; // when true, the engine controls attack timing
 
-    // Orchestrator receives animation hit frames via these:
-    // public Action PlayerImpactEvent; // invoked when player's attack anim hits
-    // public Action EnemyImpactEvent;  // invoked when enemy's attack anim hits
     [Header("Approach Tuning")]
     [SerializeField] private float playerEnemyGap = 0.5f; // meters to stop at (tune this)
     [SerializeField] private float approachSpeed = 0.2f;  // m/s
@@ -50,17 +47,17 @@ public void SetEnemyRanged(bool v)  => enemyIsRanged  = v;
     [SerializeField] private Transform enemyParent;     // optional parent for cleanliness
 
     [Header("Boss Settings")]
-    [SerializeField] private int bossEvery = 10;          // every N kills spawn a boss
+    // [SerializeField] private int bossEvery = 10;          // every N kills spawn a boss
     [SerializeField] private float bossScaleFactor = 1.25f;
     [SerializeField] private Color bossTint = Color.red;
 
-    [Header("Positions & Speed")]
-    //public Transform engagePoint;          // where enemy should stand when engaged
-    public float enemyMoveSpeed = 2.5f;
+    // [Header("Positions & Speed")]
+    // //public Transform engagePoint;          // where enemy should stand when engaged
+    // public float enemyMoveSpeed = 2.5f;
 
-    [Header("Timings")]
-    public float playerAttackRate = 1.0f;
-    public float enemyAttackRate = 1.2f;
+    // [Header("Timings")]
+    // public float playerAttackRate = 1.0f;
+    // public float enemyAttackRate = 1.2f;
 
     [Header("Animator Parameters (Triggers/Bools)")]
     public string Param_AttackTrigger = "Attack";

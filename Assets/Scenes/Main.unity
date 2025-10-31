@@ -5439,19 +5439,15 @@ MonoBehaviour:
   playerEngageZone: {fileID: 1796866588}
   playerAttackRange: {fileID: 1364499296}
   playerBody: {fileID: 1796866588}
-  playerProjectilePrefab: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
+  playerProjectilePrefab: {fileID: 1785984435570276276, guid: 52c900c106f4bec4996a9676389bd176, type: 3}
   playerMuzzle: {fileID: 1006085658}
   enemyProjectilePrefab: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
   enemyMuzzle: {fileID: 777667050}
   projectileTrailSpeed: 5
   enemySpawnPoint: {fileID: 777667050}
   enemyParent: {fileID: 777667050}
-  bossEvery: 10
-  bossScaleFactor: 1.25
+  bossScaleFactor: 5
   bossTint: {r: 1, g: 0, b: 0, a: 1}
-  enemyMoveSpeed: 1
-  playerAttackRate: 0.2
-  enemyAttackRate: 1.5
   Param_AttackTrigger: Attack
   Param_HitTrigger: Hit
   Param_DeadBool: Dead
@@ -5908,6 +5904,10 @@ PrefabInstance:
     - target: {fileID: 5336431512459618746, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_EdgeRadius
       value: 0.1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7143716695147933509, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.03
       objectReference: {fileID: 0}
     - target: {fileID: 8721548430763948524, guid: 75bc966cef7426c45a521336c15151fd, type: 3}
       propertyPath: m_Size.x
@@ -13980,7 +13980,7 @@ MonoBehaviour:
   monsterCatalog:
   - {fileID: 11400000, guid: d017a99423bb7d340abc23ba817277bf, type: 2}
   persistence: {fileID: 2042939938}
-  bossEvery: 5
+  bossEvery: 2
 --- !u!4 &2042939936
 Transform:
   m_ObjectHideFlags: 0

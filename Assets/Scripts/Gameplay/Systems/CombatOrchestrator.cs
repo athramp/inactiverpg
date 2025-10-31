@@ -213,12 +213,12 @@ public class CombatOrchestrator : MonoBehaviour
         {
             case CombatEventType.AttackStarted:
                 if (evt.Actor == Side.Player)
-                {                    
-                    if (!IsPlayerRanged()) visuals.TriggerPlayerAttack();
+                {
+                        visuals.TriggerPlayerAttack();
                 }
                 else
                 {
-                    if (!IsEnemyRanged()) visuals.TriggerEnemyAttack();
+                    visuals.TriggerEnemyAttack();
                 }
                 break;
 
@@ -240,27 +240,13 @@ public class CombatOrchestrator : MonoBehaviour
 
                 {
                     Debug.Log($"[CO] Started instance id={GetInstanceID()} "+ $"[CO] AttackImpact routed: {evt.Actor} t={Time.time:F2} (useEngineDrive={visuals.useEngineDrive})");
-                    // MARK A – prove we got past the first line
-                    Debug.Log("[CO] MARK A");
                     if (evt.Actor == Side.Player)
                     {
-
-                        // MARK B – did we enter the Player branch?
-                        Debug.Log("[CO] MARK B Player");
-                        if (IsPlayerRanged()) { visuals.TriggerPlayerAttack(); }
-                        // MARK C – just before calling BVC
-                        Debug.Log("[CO] MARK C Player before impact");
                         visuals.OnPlayerAttackImpact();
-                        // MARK D – after calling BVC
-                        Debug.Log("[CO] MARK D Player after impact");
                     }
                     else
                     {   
-                        Debug.Log("[CO] MARK B Enemy");                        
-                        if (IsEnemyRanged()) { visuals.TriggerEnemyAttack(); }
-                        Debug.Log("[CO] MARK C Enemy before impact");
                         visuals.OnEnemyAttackImpact();
-                        Debug.Log("[CO] MARK D Enemy after impact");
                     }
                 }
                 catch (System.Exception ex)
@@ -273,7 +259,6 @@ public class CombatOrchestrator : MonoBehaviour
                     {
                         if (_enemyRespawning) break;
                         _enemyRespawning = true;
-
                         // Visuals: play death state now
                         visuals.OnEnemyDied();
 
