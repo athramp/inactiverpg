@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 79bdd6d83646d7c45a09ee5b987ab0bf, type: 3}
+  m_Name: MageBlink
+  m_EditorClassIdentifier: 
+  displayName: Blink
+  kind: 2
+  castTime: 0
+  cooldown: 2
+  moveDuration: 0
+  grantsIFrames: 1
+  iFrameDuration: 0.25
+  moveDistance: 3
+  bonusDamageMultiplier: 1
+  minRangeToUse: 0
+  maxRangeToUse: 999
+  vfxOnCast: {fileID: 0}
+  vfxOnTravel: {fileID: 0}
+  vfxOnLand: {fileID: 0}

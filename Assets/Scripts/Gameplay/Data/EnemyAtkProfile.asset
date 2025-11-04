@@ -15,7 +15,7 @@ MonoBehaviour:
   period: 2
   windup: 0
   kind: 0
-  reach: 4
+  reach: 2
   projectileSpeed: 0
   aoeRadius: 1
   targetCap: 1

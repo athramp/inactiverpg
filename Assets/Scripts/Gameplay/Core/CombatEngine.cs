@@ -24,9 +24,16 @@ namespace Core.Combat
     {
         public readonly CombatEventType Type;
         public readonly Side Actor;
-        public readonly int Amount; // damage or xp when relevant
+        public readonly int Amount;          // damage or xp when relevant
+        public readonly float ProjectileETA; // seconds; 0 for melee/hitscan
+
+        // Generic ctor (non-projectile use)
         public CombatEvent(CombatEventType t, Side a, int amt = 0)
-        { Type = t; Actor = a; Amount = amt; }
+        { Type = t; Actor = a; Amount = amt; ProjectileETA = 0f; }
+
+        // Projectile impact/spawn moment (includes ETA)
+        public CombatEvent(CombatEventType t, Side a, float eta)
+        { Type = t; Actor = a; Amount = 0; ProjectileETA = eta; }
     }
 
     public sealed class CombatEngine
@@ -214,10 +221,11 @@ namespace Core.Combat
                 float projSpeed = (PlayerAttack != null ? PlayerAttack.projectileSpeed : 0f);
                 if (projSpeed > 0f)
                 {
-                    // Spawn projectile VFX now
-                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
-                    // Schedule damage on arrival
+                    // Spawn projectile VFX now (with ETA)
                     float flight = Distance1D() / System.Math.Max(0.01f, projSpeed);
+                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player, (float)flight));
+
+                    // Schedule damage on arrival
                     _impacts.Add(new PendingImpact { side = Side.Player, time = _now + flight, isProjectileArrival = true });
                     return;
                 }
@@ -246,8 +254,8 @@ namespace Core.Combat
                 float projSpeed = (EnemyAttack != null ? EnemyAttack.projectileSpeed : 0f);
                 if (projSpeed > 0f)
                 {
-                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
                     float flight = Distance1D() / System.Math.Max(0.01f, projSpeed);
+                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy, (float)flight));
                     _impacts.Add(new PendingImpact { side = Side.Enemy, time = _now + flight, isProjectileArrival = true });
                     return;
                 }

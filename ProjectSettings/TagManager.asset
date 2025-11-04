@@ -11,7 +11,7 @@ TagManager:
   - 
   - Water
   - UI
-  - 
+  - HUD
   - 
   - 
   - 
@@ -41,8 +41,14 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
+  - name: Background
+    uniqueID: 4293058835
+    locked: 0
   - name: Battle
     uniqueID: 1583698065
+    locked: 0
+  - name: HUD
+    uniqueID: 1857281261
     locked: 0
   m_RenderingLayers:
   - Default

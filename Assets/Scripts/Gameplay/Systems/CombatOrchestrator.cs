@@ -6,7 +6,13 @@ public class CombatOrchestrator : MonoBehaviour
 {
     // Singleton instance
     private static CombatOrchestrator _instance;
-
+    public PlayerSpaceCoordinator coordinator;
+    public static CombatOrchestrator Instance => _instance;
+public float PlayerLogicalX => _engine?.Player.PosX ?? 0f;
+public float EnemyLogicalX  => _engine?.Enemy.PosX  ?? 10f;
+[SerializeField] private bool  engineMovesEnemy = true;
+[SerializeField] private float desiredGap = 3f;     // units
+[SerializeField] private float enemyApproachSpeed = 3f; // units/sec (your old “Approach Speed”)
     void Awake()
     {
         if (_instance && _instance != this)
@@ -24,6 +30,17 @@ public class CombatOrchestrator : MonoBehaviour
     {
         if (_instance == this) _instance = null;
     }
+//     public void SyncPositionsToEngineNow()
+// {
+//     // visual → engine
+//     var p = _engine.Player;
+//     p.PosX = visuals.PlayerPosX;  // your PSC.GetLogicalX()
+//     _engine.UpdatePlayer(p);
+
+//     var e = _engine.Enemy;
+//     e.PosX = visuals.EnemyPosX;   // however you currently mirror enemy
+//     _engine.UpdateEnemy(e);
+// }
 
     // If you use Enter Play Mode Options (domain reload OFF):
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -35,8 +52,8 @@ public class CombatOrchestrator : MonoBehaviour
 
     [Header("Debug Settings")]
     [SerializeField] private bool enableDebug = true;
-    [SerializeField] private float playerAttackRate = 2.5f;
-    [SerializeField] private float enemyAttackRate = 3.0f;
+    // [SerializeField] private float playerAttackRate = 2.5f;
+    // [SerializeField] private float enemyAttackRate = 3.0f;
     // Fields (assign via inspector)
     [Header("Attack Profiles")]
     [SerializeField] private AttackProfile warriorAttackProfile;
@@ -52,9 +69,11 @@ public class CombatOrchestrator : MonoBehaviour
     private bool _enemyRespawning;
     private bool _playerRespawning;
     public CombatEngine DebugEngine => _engine; // used by debug panels
-
+    // Freeze enemy position after death
+    private float _enemyDeathX = 0f;   // where the dead body should stay
     private IEnumerator Start()
     {
+        // coordinator.AnchorPlayerVisuallyToLeft();
         Debug.Log($"[CO] Started instance id={GetInstanceID()}");
         // Wait for Firebase + GameLoop ready
         yield return new WaitUntil(() =>
@@ -85,16 +104,33 @@ public class CombatOrchestrator : MonoBehaviour
         Debug.Log($"[CombatOrchestrator] Enemy stats: Lv {e.Level} HP {e.Hp}/{e.MaxHp} ATK {e.Atk} DEF {e.Def}");
         var cfg = new EngineConfig
         {
-            PlayerAttackRateSec = playerAttackRate,
-            EnemyAttackRateSec = enemyAttackRate
+            // PlayerAttackRateSec = playerAttackRate,
+            // EnemyAttackRateSec = enemyAttackRate
         };
 
         _engine = new CombatEngine(p, e, cfg, HandleEvent);
         // === Assign attack profiles (from the Inspector or resources) ===
         _engine.PlayerAttack = GetPlayerAttackProfile();
+        _engine.EnemyAttack = enemyAttackProfile;   // Drag this one in the Inspector
+        float pSpeed = _engine.PlayerAttack?.projectileSpeed ?? 5f;
+        float eSpeed = _engine.EnemyAttack?.projectileSpeed ?? 5f;
+        visuals.SetProjectileSpeeds(pSpeed, eSpeed);
+        // Choose your start X
+        const float START_X = -2.4f;
+
+        // 1) Seed PSC (gameplay truth)
+        coordinator.SetLogicalX(START_X);
+
+        // 2) Push into engine once
+        var p0 = _engine.Player;
+        p0.PosX = coordinator.GetLogicalX();
+        _engine.UpdatePlayer(p0);
+
+        // 3) Place visuals immediately (no 1-frame snap)
+        visuals.SetPlayerX(p0.PosX);
+
         Debug.Log($"[CO] EnemyAttack projectileSpeed={_engine.EnemyAttack?.projectileSpeed}");
         Debug.Log($"[CO] enemyIsRanged set to {(_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f}");
-        _engine.EnemyAttack = enemyAttackProfile;   // Drag this one in the Inspector
         visuals.SetPlayerRanged((_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f);
         visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
         SyncEngineFromGameLoop();
@@ -102,9 +138,13 @@ public class CombatOrchestrator : MonoBehaviour
         var xp = gameLoop.Enemy.XpReward;
         _engine.Config.XpRewardOnKill = xp;
         // Spawn visuals for the data-selected def (no randomness in BVC)
-        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-        visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
 
+        visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
+        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
+        // Seed engine logical X to match the visual spawn X (so Update won't snap it back)
+        var e0 = _engine.Enemy;
+        e0.PosX = visuals.EnemySpawnX;   // uses the helper you added above
+        _engine.UpdateEnemy(e0);
 
         visuals.useEngineDrive = true;
         // ----- Progression wiring -----
@@ -218,22 +258,51 @@ public class CombatOrchestrator : MonoBehaviour
         // Optional: notify persistence/UI layers
         // gameLoop.OnCombatSynced?.Invoke();
     }
-    private void Update()
-    {
-        if (_engine == null || visuals == null) return;
-        {
-            // === Feed current positions into the engine ===
-            var player = _engine.Player;
-            player.PosX = visuals.PlayerPosX;
-            _engine.UpdatePlayer(player);
+    void Update()
+{
 
-            var enemy = _engine.Enemy;
-            enemy.PosX = visuals.EnemyPosX;
-            _engine.UpdateEnemy(enemy);
-            // === Tick the engine ===
-            _engine.Tick(Time.deltaTime);
-        }
+        if (_engine == null) return;
+    // if ((Time.frameCount % 20) == 0)
+    // Debug.Log($"[CO] pX={_engine.Player.PosX:F2} eX={_engine.Enemy.PosX:F2}");
+    float dt = Time.deltaTime;
+
+    // 1) Visual -> Engine (player logical from PSC)
+    var p = _engine.Player;
+    p.PosX = coordinator.GetLogicalX();
+    _engine.UpdatePlayer(p);
+
+    // 2) Optional: simple enemy gap AI in logical space (CO only)
+    var e = _engine.Enemy;
+    if (engineMovesEnemy && !_enemyRespawning)
+    {
+        float dir = Mathf.Sign(p.PosX - e.PosX);
+        if (dir == 0f) dir = 1f;  // tie-breaker to avoid NaN
+
+        // target keeps 'desiredGap' away from player
+        float target = p.PosX - dir * desiredGap;
+
+        // clamp movement by approach speed
+        float next = Mathf.MoveTowards(e.PosX, target, enemyApproachSpeed * dt);
+
+        // (optional) arena clamp if you have one:
+        // next = Mathf.Clamp(next, arenaMinX, arenaMaxX);
+
+        e.PosX = next;
     }
+    _engine.UpdateEnemy(e);
+
+    // 3) Run combat logic (casts, projectiles, timers)
+    _engine.Tick(dt);
+
+    // 4) Engine -> Visuals (single source of placement)
+    visuals.SetPlayerX(_engine.Player.PosX);
+    if (_enemyRespawning)
+        visuals.SetEnemyX(_enemyDeathX);   // keep the corpse where it fell
+    else
+        visuals.SetEnemyX(_engine.Enemy.PosX);
+}
+
+
     private bool IsPlayerRanged() => (_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f;
     private bool IsEnemyRanged() => (_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f;
     private void HandleEvent(in CombatEvent evt)
@@ -259,32 +328,31 @@ public class CombatOrchestrator : MonoBehaviour
                 SyncGameLoopFromEngine();
                 visuals.SetPlayerHp(gameLoop.Player.Hp, gameLoop.Player.MaxHp);
                 visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-                break;
+                    break;
+                
             case CombatEventType.AttackImpact:
+            {
                 try
-
                 {
-                    Debug.Log($"[CO] Started instance id={GetInstanceID()} "+ $"[CO] AttackImpact routed: {evt.Actor} t={Time.time:F2} (useEngineDrive={visuals.useEngineDrive})");
+                    Debug.Log($"[CO] AttackImpact routed: {evt.Actor} ETA={evt.ProjectileETA:F2}s (useEngineDrive={visuals.useEngineDrive})");
                     if (evt.Actor == Side.Player)
-                    {
-                        visuals.OnPlayerAttackImpact();
-                    }
+                        visuals.OnPlayerAttackImpactWithETA(evt.ProjectileETA);
                     else
-                    {   
-                        visuals.OnEnemyAttackImpact();
-                    }
+                        visuals.OnEnemyAttackImpactWithETA(evt.ProjectileETA);
                 }
                 catch (System.Exception ex)
                 {
                     Debug.LogError($"[CO] Exception in AttackImpact handling: {ex}");
                 }
                 break;
+            }
             case CombatEventType.UnitDied:
                     if (evt.Actor == Side.Enemy)
                     {
                         if (_enemyRespawning) break;
                         _enemyRespawning = true;
                         // Visuals: play death state now
+                        _enemyDeathX = _engine.Enemy.PosX; // freeze position
                         visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
                         visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
                         visuals.OnEnemyDied();
@@ -363,7 +431,13 @@ public class CombatOrchestrator : MonoBehaviour
         // Spawn visuals for the newly selected def (keeps stats & visuals in sync)
         visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
         visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
+        // Keep engine and visuals aligned on the same starting X
+        var e2 = _engine.Enemy;
+        e2.PosX = visuals.EnemySpawnX;
+        _engine.UpdateEnemy(e2);
+
         _enemyRespawning = false;
+        _enemyDeathX = 0f;
     }
 
     private System.Collections.IEnumerator PlayerRespawnRoutine()
