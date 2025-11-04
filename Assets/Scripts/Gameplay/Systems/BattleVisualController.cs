@@ -456,29 +456,64 @@ private IEnumerator FlyToAnchor(Transform proj, Transform anchor, float speed)
 
     // ----------------- Animation Events -----------------
 
-        public void OnPlayerAttackImpact() // legacy (no ETA)
+    // ------- Public helpers for external callers (e.g., SkillRunner) -------
+    // Safely returns the player's world position (muzzle > root > this)
+public Vector3 GetPlayerWorldPosition()
+{
+    if (playerMuzzle) return playerMuzzle.position;
+    if (playerRoot)   return playerRoot.position;
+    return transform.position;
+}
+
+// Safely returns the enemy's world position (enemyMover > enemyRoot > this)
+public Vector3 GetEnemyWorldPosition()
+{
+    if (enemyMover)   return enemyMover.position;
+    if (enemyRoot)    return enemyRoot.position;
+    return transform.position;
+}
+
+// Returns the world root transform for parenting transient VFX
+public Transform GetWorldRoot()
+{
+    return worldRoot ? worldRoot : transform;
+}
+
+// Spawns a projectile VFX that flies from player to current enemy using your existing pipeline
+public void SpawnSkillProjectile(GameObject prefab, float speed)
+{
+    if (!prefab) return;
+
+    var from = playerMuzzle ? playerMuzzle : playerRoot;
+    var to   = _currentEnemy ? _currentEnemy.transform : null;
+
+    // Reuse your existing spawner so parenting/sorting/RT setup stays consistent
+    SpawnAndFlyProjectile(from, to, prefab, speed);
+}
+
+    public void OnPlayerAttackImpact() // legacy (no ETA)
     {
         Debug.Log($"[BVC#{GetInstanceID()}] ENTRY OnPlayerAttackImpact drive={useEngineDrive}");
-            if (!useEngineDrive) return;
+        if (!useEngineDrive) return;
 
-            // If ranged (projectileSpeed > 0), spawn projectile; otherwise keep your “Hit” reaction
-            // We can detect “ranged” by presence of prefab/muzzle
-            if (playerProjectilePrefab && playerMuzzle&& playerIsRanged)
+        // If ranged (projectileSpeed > 0), spawn projectile; otherwise keep your “Hit” reaction
+        // We can detect “ranged” by presence of prefab/muzzle
+        if (playerProjectilePrefab && playerMuzzle && playerIsRanged)
         {
-                Debug.Log("[BVC] OnPlayerAttackImpact - spawning projectile");
+            Debug.Log("[BVC] OnPlayerAttackImpact - spawning projectile");
             var target = _currentEnemy ? _currentEnemy.transform : null;
-                Debug.Log($"[BVC] → Projectile speed: {playerProjectileTrailSpeed}");
-                float pX = CombatOrchestrator.Instance.PlayerLogicalX;
-                float eX = CombatOrchestrator.Instance.EnemyLogicalX;
-                SpawnAndFlyProjectile_LockedToLogicalX(playerRoot, _currentEnemy.transform, pX, eX,
-                    playerProjectilePrefab, playerProjectileTrailSpeed);
-            }
-            else
-            {
+            Debug.Log($"[BVC] → Projectile speed: {playerProjectileTrailSpeed}");
+            float pX = CombatOrchestrator.Instance.PlayerLogicalX;
+            float eX = CombatOrchestrator.Instance.EnemyLogicalX;
+            SpawnAndFlyProjectile_LockedToLogicalX(playerRoot, _currentEnemy.transform, pX, eX,
+                playerProjectilePrefab, playerProjectileTrailSpeed);
+        }
+        else
+        {
             // melee VFX: cause target hit reaction immediately
             if (enemyAnimator) { SafeTrigger(enemyAnimator, Param_HitTrigger); Debug.Log("[BVC] Triggered enemy hit reaction."); }
-            }
         }
+    }
 
     public void OnEnemyAttackImpact() // legacy (no ETA)
     {

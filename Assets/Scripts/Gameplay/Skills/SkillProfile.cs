@@ -4,7 +4,8 @@ public enum SkillRole
 {
     Displacement,   // movement-only
     Damage,         // pure damage
-    CrowdControl    // (later) stuns, roots, interrupts
+    CrowdControl,    // (later) stuns, roots, interrupts
+    Support        // (later) buffs, heals
 }
 
 public enum MovementMode
