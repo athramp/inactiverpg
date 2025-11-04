@@ -13,15 +13,20 @@ MonoBehaviour:
   m_Name: WarriorCharge
   m_EditorClassIdentifier: 
   displayName: Charge
-  kind: 1
-  castTime: 0.15
+  role: 0
+  movement: 1
+  castTime: 0.2
   cooldown: 6
-  moveDuration: 0.2
+  moveDuration: 0.5
   grantsIFrames: 0
   iFrameDuration: 0.2
-  moveDistance: 1
-  bonusDamageMultiplier: 1.5
-  minRangeToUse: 2
+  moveDistance: 3
+  isPureDamage: 0
+  damageMultiplier: 1
+  flatBonusDamage: 0
+  usesProjectile: 0
+  projectileSpeedOverride: 0
+  minRangeToUse: 0
   maxRangeToUse: 999
   vfxOnCast: {fileID: 0}
   vfxOnTravel: {fileID: 0}

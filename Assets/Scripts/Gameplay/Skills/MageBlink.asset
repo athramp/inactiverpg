@@ -12,15 +12,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 79bdd6d83646d7c45a09ee5b987ab0bf, type: 3}
   m_Name: MageBlink
   m_EditorClassIdentifier: 
-  displayName: Blink
-  kind: 2
-  castTime: 0
-  cooldown: 2
-  moveDuration: 0
-  grantsIFrames: 1
-  iFrameDuration: 0.25
+  displayName: blink
+  role: 0
+  movement: 3
+  castTime: 0.2
+  cooldown: 6
+  moveDuration: 0.25
+  grantsIFrames: 0
+  iFrameDuration: 0.2
   moveDistance: 3
-  bonusDamageMultiplier: 1
+  isPureDamage: 0
+  damageMultiplier: 1
+  flatBonusDamage: 0
+  usesProjectile: 0
+  projectileSpeedOverride: 0
   minRangeToUse: 0
   maxRangeToUse: 999
   vfxOnCast: {fileID: 0}

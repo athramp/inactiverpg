@@ -6638,7 +6638,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: 0, y: 0.000061035156}
+  m_AnchoredPosition: {x: 0, y: 0.00012207031}
   m_SizeDelta: {x: 0, y: 64}
   m_Pivot: {x: 0.5, y: 0}
 --- !u!114 &978469493
@@ -17199,8 +17199,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   coordinator: {fileID: 2042939940}
-  enemyLogicalAnchor: {fileID: 114128663}
-  enemyLogicalX: 0
 --- !u!114 &2042939943
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -17214,10 +17212,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   runner: {fileID: 2132338267}
-  charge: {fileID: 11400000, guid: 2c0f2ff0142cef4499cfc767b77084ef, type: 2}
-  roll: {fileID: 11400000, guid: 22ad68e1405d6464c872034b1653aa00, type: 2}
-  blink: {fileID: 11400000, guid: 9e0b7685fa0e2f9469a35005e4e4509c, type: 2}
   gate: {fileID: 2042939942}
+  charge: {fileID: 11400000, guid: 15fa3c4cff2cce34397cba4a2abf98c8, type: 2}
+  roll: {fileID: 11400000, guid: 6c5e411ee9598d74a9ca4abfc27169f9, type: 2}
+  blink: {fileID: 11400000, guid: 476cb25248634294fbb0b8dca7fe6fa0, type: 2}
+  conflagrate: {fileID: 11400000, guid: 18fef7418fb5fa74a8277ca0492a4455, type: 2}
+  snipe: {fileID: 11400000, guid: 0be9550b12873d14dbf4269fde529825, type: 2}
+  smash: {fileID: 0}
 --- !u!1 &2049142298
 GameObject:
   m_ObjectHideFlags: 0

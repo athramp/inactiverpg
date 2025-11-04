@@ -12,16 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 79bdd6d83646d7c45a09ee5b987ab0bf, type: 3}
   m_Name: ArcherRoll
   m_EditorClassIdentifier: 
-  displayName: 
-  kind: 0
+  displayName: Roll
+  role: 0
+  movement: 2
   castTime: 0.2
   cooldown: 6
-  moveDuration: 0.25
+  moveDuration: 1
   grantsIFrames: 0
   iFrameDuration: 0.2
   moveDistance: 1
-  bonusDamageMultiplier: 1
-  minRangeToUse: 2
+  isPureDamage: 0
+  damageMultiplier: 1
+  flatBonusDamage: 0
+  usesProjectile: 0
+  projectileSpeedOverride: 0
+  minRangeToUse: 0
   maxRangeToUse: 999
   vfxOnCast: {fileID: 0}
   vfxOnTravel: {fileID: 0}

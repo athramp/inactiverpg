@@ -38,7 +38,14 @@ namespace Core.Combat
 
     public sealed class CombatEngine
     {
-        private struct PendingImpact { public Side side; public float time; public bool isProjectileArrival; }
+        // If damageOverride != null, use that exact damage (e.g., skills).
+        private struct PendingImpact
+        {
+            public Side side;
+            public float time;
+            public bool isProjectileArrival;
+            public int? damageOverride;
+        }
         public AttackProfile PlayerAttack; // NEW
         public AttackProfile EnemyAttack;  // NEW
         public FighterState Player;
@@ -171,39 +178,111 @@ namespace Core.Combat
 
                 if (imp.isProjectileArrival)
                 {
-                    // Apply delayed projectile damage on arrival
-                    if (imp.side == Side.Player)
+                    // If a skill scheduled an exact damage, use it verbatim:
+                    if (imp.damageOverride.HasValue)
                     {
-                        int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-                        Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
-                        _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
-                        if (Enemy.IsDead)
+                        int dmg = imp.damageOverride.Value;
+                        if (imp.side == Side.Player)
                         {
-                            _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                            Player.Xp += Config.XpRewardOnKill;
-                            _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
+                            Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
+                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
+                            if (Enemy.IsDead)
+                            {
+                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
+                                Player.Xp += Config.XpRewardOnKill;
+                                _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
+                            }
+                        }
+                        else
+                        {
+                            Player.Hp = System.Math.Max(0, Player.Hp - dmg);
+                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
+                            if (Player.IsDead)
+                            {
+                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+                            }
                         }
                     }
-                    else // Enemy projectile arrival
+                    else
                     {
-                        int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-                        Player.Hp = System.Math.Max(0, Player.Hp - dmg);
-                        _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
-                        if (Player.IsDead)
+                        // Existing projectile-arrival behavior (normal attacks)
+                        if (imp.side == Side.Player)
                         {
-                            _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+                            int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
+                            Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
+                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
+                            if (Enemy.IsDead)
+                            {
+                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
+                                Player.Xp += Config.XpRewardOnKill;
+                                _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
+                            }
+                        }
+                        else // Enemy projectile arrival
+                        {
+                            int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
+                            Player.Hp = System.Math.Max(0, Player.Hp - dmg);
+                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
+                            if (Player.IsDead)
+                            {
+                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+                            }
                         }
                     }
                 }
                 else
                 {
-                    // Melee/hitscan impact (or projectile spawn moment handled in ResolveImpact)
+                    // Melee/hitscan impact (unchanged)
                     ResolveImpact(imp.side);
                 }
             }
         }
 
+        /// <summary>
+        /// Apply damage that is not tied to the normal attack cadence.
+        /// etaSec > 0 delays the hit; otherwise it lands immediately.
+        /// </summary>
+        public void ApplyPureDamage(Side source, float multiplier, int flatBonus, float etaSec = 0f)
+        {
+            // Decide attacker/defender
+            ref FighterState atk = ref (source == Side.Player ? ref Player : ref Enemy);
+            ref FighterState def = ref (source == Side.Player ? ref Enemy  : ref Player);
 
+            // Base damage via your existing calculator
+            int baseDmg  = DamageCalculator.ComputeDamage(atk.Atk, def.Def);
+            int finalDmg = System.Math.Max(0, (int)System.Math.Round(baseDmg * multiplier) + flatBonus);
+
+            if (etaSec <= 0f)
+            {
+                // Apply now (reuse the same path you use when a normal hit lands)
+                def.Hp = System.Math.Max(0, def.Hp - finalDmg);
+                _emit(new CombatEvent(CombatEventType.DamageApplied, source, finalDmg));
+
+                // Death + XP (mirror your existing logic)
+                if ((source == Side.Player && def.IsDead))
+                {
+                    _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
+                    Player.Xp += Config.XpRewardOnKill;
+                    _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
+                }
+                else if (source == Side.Enemy && def.IsDead)
+                {
+                    _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+                }
+            }
+            else
+            {
+                // Schedule for later; we mark isProjectileArrival=true to reuse the arrival slot,
+                // but we carry damageOverride so we don't recompute damage at resolution.
+                _impacts.Add(new PendingImpact
+                {
+                    side = source,
+                    time = _now + etaSec,
+                    isProjectileArrival = true,
+                    damageOverride = finalDmg
+                });
+            }
+        }
         public void UpdateEnemy(FighterState s) { Enemy = s; }
         private void ResolveImpact(Side side)
         {

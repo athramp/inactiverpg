@@ -42,11 +42,12 @@ public class SkillRunner : MonoBehaviour
         // optional anim trigger
         if (playerAnimator)
         {
-            switch (skill.kind)
+            switch (skill.movement)
             {
-                case SkillKind.Charge: playerAnimator.SetTrigger("Charge"); break;
-                case SkillKind.Roll:   playerAnimator.SetTrigger("Roll");   break;
-                case SkillKind.Blink:  playerAnimator.SetTrigger("Blink");  break;
+                case MovementMode.DashToward: playerAnimator.SetTrigger("Charge"); break;
+                case MovementMode.DashAway:   playerAnimator.SetTrigger("Roll");   break;
+                case MovementMode.BlinkAway:  playerAnimator.SetTrigger("Blink");  break;
+                case MovementMode.None:       break;
             }
         }
 
@@ -54,16 +55,58 @@ public class SkillRunner : MonoBehaviour
         if (skill.castTime > 0f) yield return new WaitForSeconds(skill.castTime);
 
         // compute displacement relative to current enemy position
-        float dx = ComputeDisplacement(skill);
+        // logical positions at fire time
+        float selfX  = coordinator.LogicalX;
+        float enemyX = GetEnemyLogicalX(selfX);
 
+        // compute displacement relative to current enemy position
+        float dx = ComputeDisplacement(skill, selfX, enemyX);
+        if (skill.isPureDamage || skill.role == SkillRole.Damage)
+        {
+            float eta = 0f;
+
+            if (skill.usesProjectile)
+            {
+                float projectileSpeed = skill.projectileSpeedOverride;
+                if (projectileSpeed <= 0f)
+                {
+                    var co = CombatOrchestrator.Instance;
+                    if (co != null)
+                        projectileSpeed = co.DebugEngine?.PlayerAttack?.projectileSpeed ?? 0f;
+                }
+                if (projectileSpeed > 0f)
+                    eta = Mathf.Abs(enemyX - selfX) / projectileSpeed;
+            }
+
+            var orchestrator = CombatOrchestrator.Instance;
+            if (orchestrator != null && orchestrator.DebugEngine != null)
+            {
+                orchestrator.DebugEngine.ApplyPureDamage(
+                    Core.Combat.Side.Player,
+                    skill.damageMultiplier,
+                    skill.flatBonusDamage,
+                    eta
+                );
+            }
+            else
+            {
+                Debug.LogWarning("[SkillRunner] Engine not available to ApplyPureDamage.");
+            }
+
+            if (skill.vfxOnLand && !skill.usesProjectile)
+                Instantiate(skill.vfxOnLand, coordinator.transform.position, Quaternion.identity);
+
+            _cooldownUntil[skill] = Time.time + Mathf.Max(0f, skill.cooldown);
+            _casting = false;
+            yield break;
+        }
         // i-frames (hook in your damage gate here if you have one)
         // if (skill.grantsIFrames) DamageGate.EnableFor(skill.iFrameDuration);
 
         // movement: blink instant, others smoothly over moveDuration
-        if (skill.kind == SkillKind.Blink || skill.moveDuration <= 0f)
+        if (skill.movement == MovementMode.BlinkAway || skill.moveDuration <= 0f)
         {
             coordinator.RequestPlayerDisplacement(dx);
-            // coordinator.SyncVisualToLogical();
         }
         else
         {
@@ -77,7 +120,6 @@ public class SkillRunner : MonoBehaviour
                 last += step;
 
                 coordinator.RequestPlayerDisplacement(step);
-                // coordinator.SyncVisualToLogical();
                 yield return null;
             }
         }
@@ -106,27 +148,22 @@ public class SkillRunner : MonoBehaviour
         return true;
     }
 
-    private float ComputeDisplacement(SkillProfile s)
+    private float ComputeDisplacement(SkillProfile s, float selfX, float enemyX)
     {
-        float selfX  = coordinator.GetLogicalX();                 // or .LogicalX if you added the prop
-float enemyX = GetEnemyLogicalX(selfX);
-float dirToEnemy = Mathf.Sign(enemyX - selfX);
-float d = Mathf.Abs(s.moveDistance);
+        if (s.role != SkillRole.Displacement || s.movement == MovementMode.None)
+            return 0f;
 
-float dx = s.kind switch {
-    SkillKind.Charge => +d * dirToEnemy,
-    SkillKind.Roll   => -d * dirToEnemy,
-    SkillKind.Blink  => -d * dirToEnemy,
-    _                => 0f
-};
+        float dirToEnemy = Mathf.Sign(enemyX - selfX);
+        if (dirToEnemy == 0f) dirToEnemy = 1f;
 
-Debug.Log(
-  $"[SkillRunner] {s.displayName} ({s.kind})  moveDist={s.moveDistance}  " +
-  $"selfX={selfX:F2} enemyX={enemyX:F2} dirToEnemy={dirToEnemy} -> dx={dx:F2}"
-);
-return dx;
+        switch (s.movement)
+        {
+            case MovementMode.DashToward: return  +s.moveDistance * dirToEnemy; // Charge
+            case MovementMode.DashAway:   return  -s.moveDistance * dirToEnemy; // Roll
+            case MovementMode.BlinkAway:  return  -s.moveDistance * dirToEnemy; // Blink-like
+            default:                      return  0f;
+        }
     }
-
     private float GetEnemyLogicalX(float fallbackFromSelf)
     {
         var co = CombatOrchestrator.Instance;
