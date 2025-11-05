@@ -123,6 +123,7 @@ GameObject:
   - component: {fileID: 4298046449029702713}
   - component: {fileID: 3420484331604785018}
   - component: {fileID: 7354135055307964643}
+  - component: {fileID: -953257205265097222}
   m_Layer: 0
   m_Name: Orc
   m_TagString: Untagged
@@ -189,7 +190,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 1583698065
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_Sprite: {fileID: 5120410236738981136, guid: 06304c4728ea96d4a819db5e17bd3151, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -236,8 +237,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76381ca16bd491c48a21ce54d99019ce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  controller: {fileID: 0}
-  isPlayer: 0
+  visuals: {fileID: 0}
+  enableAnimationEvents: 1
 --- !u!50 &3420484331604785018
 Rigidbody2D:
   serializedVersion: 5
@@ -278,3 +279,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   def: {fileID: 11400000, guid: d017a99423bb7d340abc23ba817277bf, type: 2}
+--- !u!114 &-953257205265097222
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7165065568128235175}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff70f0fb346f0a842b472d3a44bf1815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  orchestrator: {fileID: 0}
+  skills:
+  - {fileID: 11400000, guid: 18fef7418fb5fa74a8277ca0492a4455, type: 2}
+  randomOrder: 1
+  cooldownRange: {x: 2, y: 3}
+  openerDelay: 0.25
+  gateByRange: 0
+  extraRangeBuffer: 0
+  defaultDisplacementDuration: 0.15
+  randomStaggerRange: {x: 0, y: 0.05}
+  visuals: {fileID: 0}

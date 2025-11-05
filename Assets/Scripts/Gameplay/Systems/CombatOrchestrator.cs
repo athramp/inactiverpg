@@ -10,7 +10,9 @@ public class CombatOrchestrator : MonoBehaviour
     public static CombatOrchestrator Instance => _instance;
 public float PlayerLogicalX => _engine?.Player.PosX ?? 0f;
     public float EnemyLogicalX => _engine?.Enemy.PosX ?? 10f;
-public int   PlayerAtk => _engine?.Player.Atk ?? 0;
+    public int PlayerAtk => _engine?.Player.Atk ?? 0;
+public int EnemyAtk => _engine?.Enemy.Atk ?? 0;
+    [Header("Enemy AI Movement")]
 [SerializeField] private bool  engineMovesEnemy = true;
 [SerializeField] private float desiredGap = 3f;     // units
 [SerializeField] private float enemyApproachSpeed = 3f; // units/sec (your old “Approach Speed”)
@@ -23,25 +25,13 @@ public int   PlayerAtk => _engine?.Player.Atk ?? 0;
             return;
         }
         _instance = this;
-        // Optional if you change scenes:
-        // DontDestroyOnLoad(gameObject);
+
     }
 
     void OnDestroy()
     {
         if (_instance == this) _instance = null;
     }
-//     public void SyncPositionsToEngineNow()
-// {
-//     // visual → engine
-//     var p = _engine.Player;
-//     p.PosX = visuals.PlayerPosX;  // your PSC.GetLogicalX()
-//     _engine.UpdatePlayer(p);
-
-//     var e = _engine.Enemy;
-//     e.PosX = visuals.EnemyPosX;   // however you currently mirror enemy
-//     _engine.UpdateEnemy(e);
-// }
 
     // If you use Enter Play Mode Options (domain reload OFF):
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -54,8 +44,7 @@ public int   PlayerAtk => _engine?.Player.Atk ?? 0;
     public float EnemyX  => _engine?.Enemy.PosX  ?? 0f;
     [Header("Debug Settings")]
     [SerializeField] private bool enableDebug = true;
-    // [SerializeField] private float playerAttackRate = 2.5f;
-    // [SerializeField] private float enemyAttackRate = 3.0f;
+
     // Fields (assign via inspector)
     [Header("Attack Profiles")]
     [SerializeField] private AttackProfile warriorAttackProfile;
@@ -78,7 +67,65 @@ public int   PlayerAtk => _engine?.Player.Atk ?? 0;
     public void CO_HealPlayer(int amount)         => _engine?.HealPlayer(amount);
     public void CO_AddShieldToPlayer(int amount)  => _engine?.AddShieldToPlayer(amount);
     public void CO_StunEnemy(float seconds)       => _engine?.StunEnemy(seconds);
-    public void CO_KnockbackEnemy(float dx)       => _engine?.KnockbackEnemy(dx);
+    public void CO_KnockbackEnemy(float dx) => _engine?.KnockbackEnemy(dx);
+    // projectile ETA broadcast (to keep your existing VFX/event flow consistent)
+
+    // damage/heal/shield (enemy -> player, and enemy self support)
+    public void CO_HealEnemy(int amt)            => _engine?.HealEnemy(amt);
+    public void CO_AddShieldToEnemy(int amt)     => _engine?.AddShieldToEnemy(amt);
+    public void CO_StunPlayer(float seconds) => _engine?.StunPlayer(seconds);
+    Coroutine _enemyMoveCoro;
+
+    public void TweenEnemyBy(float dx, float duration, float startDelay = 0f)
+    {
+        if (_engine == null) return;
+        if (_enemyMoveCoro != null) StopCoroutine(_enemyMoveCoro);
+        _enemyMoveCoro = StartCoroutine(Co_TweenEnemyBy(dx, duration, startDelay));
+    }
+
+    IEnumerator Co_TweenEnemyBy(float dx, float duration, float startDelay)
+    {
+        if (startDelay > 0f) yield return new WaitForSeconds(startDelay);
+
+        float start = _engine.Enemy.PosX;
+        float end   = start + dx;
+        if (duration <= 0f) { _engine.Enemy.PosX = end; yield break; }
+
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / duration;
+            // ease-out (smoothstep)
+            float e = t * t * (3f - 2f * t);
+            _engine.Enemy.PosX = Mathf.Lerp(start, end, e);
+            // if you have a visual sync/tween method, call it here (optional)
+            yield return null;
+        }
+        _engine.Enemy.PosX = end;
+        _enemyMoveCoro = null;
+    }
+    // Enemy: logical shift only (enemy lives under worldRoot)
+    public void KnockbackEnemy(float dx)
+    {
+        if (_engine == null) return;
+        _engine.Enemy.PosX += dx;
+        // no visual synch yet; will be done in Update()
+    }
+
+    // Player: delegate to coordinator so world-shift can occur
+    public void KnockbackPlayer(float dx)
+    {
+        if (_engine == null || coordinator == null) return;
+
+        // Let coordinator move player + shift world if needed
+        coordinator.RequestPlayerDisplacement(dx);
+
+        // Sync engine’s logical pos to coordinator’s truth
+        _engine.Player.PosX = coordinator.GetLogicalX();
+
+        // Optional: ensure sprite matches logical immediately
+        coordinator.SyncVisualToLogical();
+    }      // or engine-side if you have it
     private IEnumerator Start()
     {
         // coordinator.AnchorPlayerVisuallyToLeft();
@@ -194,8 +241,40 @@ public int   PlayerAtk => _engine?.Player.Atk ?? 0;
 
         }
     }
-    
-    
+
+    public int GetEnemyAtk()
+    {
+        return EnemyAtk;
+        
+    }
+        
+       
+    // Logical X of this enemy (use whatever store you already have)
+public float GetEnemyLogicalX()
+{
+    // current single-enemy engine
+    return _engine != null ? _engine.Enemy.PosX : visuals.EnemySpawnX;
+}
+
+public float GetPlayerLogicalX()
+{
+    return coordinator != null ? coordinator.GetLogicalX() : (_engine?.Player.PosX ?? 0f);
+}
+
+public bool CanEnemyAct()
+{
+    var f = _engine?.Enemy ?? default;
+    return _engine != null && f.Hp > 0 && f.MaxHp > 0 && f.StunTimer <= 0f && !_enemyRespawning;
+}
+
+public bool CanPlayerAct()
+{
+    if (_engine == null) return false;
+    var f = _engine.Player;
+    if (_playerRespawning) return false;
+    return f.Hp > 0 && f.MaxHp > 0 && f.StunTimer <= 0f;
+}
+
     private AttackProfile GetPlayerAttackProfile()
     {
         // Works for enum, string, or int class ids
@@ -318,6 +397,11 @@ public void ForceRefreshHpUI_Player()
 
     private bool IsPlayerRanged() => (_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f;
     private bool IsEnemyRanged() => (_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f;
+        public void EmitProjectileETA_FromEnemy(float eta)
+{
+    var ev = new CombatEvent(CombatEventType.AttackImpact, Side.Enemy, eta);
+    HandleEvent(ev); // <-- replace RaiseEvent(...) with this
+}
     private void HandleEvent(in CombatEvent evt)
     {
         Debug.Log($"[CO#{GetInstanceID()}] HandleEvent type={evt.Type} actor={evt.Actor}");

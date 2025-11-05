@@ -3,13 +3,15 @@ using System.Collections.Generic;
 namespace Core.Combat
 {
     public enum Side { Player, Enemy }
-    
+    public struct CombatActorId { public int Value; } // immutable handle
+    public struct TeamId { public byte Value; } // 0=players,1=monsters,...
     public struct FighterState
     {
         public int Level, Hp, MaxHp, Atk, Def, Xp;
         public float PosX;                // NEW: canonical 1D position
         public bool IsDead => Hp <= 0;
-
+        public CombatActorId ActorId; // optional link to higher-level actor
+        public TeamId Team;
         public int Shield;             // absorbs incoming damage first
         public float StunTimer;        // >0 means stunned
         public float AtkBuffTimer;     // example: temporary ATK buff
@@ -300,11 +302,25 @@ namespace Core.Combat
             // Optional event if you add one; otherwise omit.
             _emit(new CombatEvent(CombatEventType.Healed, Side.Player, amount));
         }
+        public void HealEnemy(int amount)
+        {
+            if (amount <= 0) return;
+
+            Enemy.Hp = System.Math.Min(Enemy.MaxHp, Enemy.Hp + amount);
+
+            // Optional event if you add one; otherwise omit.
+            _emit(new CombatEvent(CombatEventType.Healed, Side.Enemy, amount));
+        }
 
         public void AddShieldToPlayer(int amount)
         {
             if (amount <= 0) return;
             Player.Shield += amount;
+        }
+        public void AddShieldToEnemy(int amount)
+        {
+            if (amount <= 0) return;
+            Enemy.Shield += amount;
         }
 
         public void StunEnemy(float seconds)
@@ -312,13 +328,17 @@ namespace Core.Combat
             if (seconds <= 0f) return;
             Enemy.StunTimer = System.Math.Max(Enemy.StunTimer, seconds);
         }
+        public void StunPlayer(float seconds)
+        {
+            if (seconds <= 0f) return;
+            Player.StunTimer = System.Math.Max(Player.StunTimer, seconds);
+        }
 
         public void KnockbackEnemy(float dx)
         {
             Enemy.PosX += dx;
             // visuals will pick up Enemy.PosX in your Orchestrator
         }
-
 
 
         /// <summary>

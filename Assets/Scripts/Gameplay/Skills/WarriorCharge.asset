@@ -21,7 +21,7 @@ MonoBehaviour:
   respectRange: 1
   minRangeToUse: 0
   maxRangeToUse: 999
-  targeting: 1
+  targeting: 0
   areaRadius: 1.25
   moveDistance: 3
   moveDuration: 0.5
