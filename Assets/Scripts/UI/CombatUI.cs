@@ -6,13 +6,17 @@ public class CombatUI : MonoBehaviour
     public Slider PlayerHPBar;
     public Slider PlayerXPBar;
     public Slider EnemyHPBar;
+    public CombatOrchestrator orchestrator;
+    [SerializeField] PlayerProgression playerProgression;
+     [SerializeField] GameLoopService game;
 
-    private GameLoopService game;
+ 
+    
     
 
     void Start()
     {
-        game = FindObjectOfType<GameLoopService>();
+        
 
         // Init defaults
         PlayerHPBar.value = 1f;
@@ -22,19 +26,20 @@ public class CombatUI : MonoBehaviour
 
     void Update()
     {
-        if (game == null || game.Player == null || game.Enemy == null) return;
+           var eng = orchestrator.DebugEngine;
+        if (orchestrator == null || orchestrator.DebugEngine == null ) return;
 
         // Player HP bar
-        PlayerHPBar.maxValue = game.Player.MaxHp;
-        PlayerHPBar.value = game.Player.Hp;
+        PlayerHPBar.maxValue = eng.Player.MaxHp;
+        PlayerHPBar.value = eng.Player.Hp;
 
         // XP bar
-        int xpToNext = game.XpTable.GetXpToNextLevel(game.Player.Level);
+        int xpToNext = game.XpTable.GetXpToNextLevel(eng.Player.Level);
         PlayerXPBar.maxValue = xpToNext;
-        PlayerXPBar.value = game.Player.CurrentXp;
+        PlayerXPBar.value = playerProgression.XpIntoLevel;
 
         // Enemy HP bar
-        EnemyHPBar.maxValue = game.Enemy.HpMax;
-        EnemyHPBar.value = game.Enemy.Hp;
+        EnemyHPBar.maxValue = eng.Enemy.MaxHp;
+        EnemyHPBar.value = eng.Enemy.Hp;
     }
 }

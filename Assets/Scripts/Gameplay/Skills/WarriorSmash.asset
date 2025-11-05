@@ -10,12 +10,12 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 79bdd6d83646d7c45a09ee5b987ab0bf, type: 3}
-  m_Name: WarriorCharge
+  m_Name: WarriorSmash
   m_EditorClassIdentifier: 
-  displayName: Charge
-  kind: 0
-  castTime: 0.2
-  cooldown: 6
+  displayName: Snipe
+  kind: 2
+  castTime: 2
+  cooldown: 8
   grantsIFrames: 0
   iFrameDuration: 0.2
   respectRange: 1
@@ -23,19 +23,19 @@ MonoBehaviour:
   maxRangeToUse: 999
   targeting: 1
   areaRadius: 1.25
-  moveDistance: 3
-  moveDuration: 0.5
+  moveDistance: 0
+  moveDuration: 0
   useProjectile: 0
   projectileSpeed: 6
   damageType: 0
   damageMultiplier: 1
-  flatBonusDamage: 0
+  flatBonusDamage: 80
   ccType: 0
-  ccDuration: 1
+  ccDuration: 5
   ccMagnitude: 2
   supportType: 0
   supportAmount: 20
   supportDuration: 5
   vfxOnCast: {fileID: 0}
   vfxOnTravel: {fileID: 0}
-  vfxOnLand: {fileID: 0}
+  vfxOnLand: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}

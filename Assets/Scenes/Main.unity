@@ -17212,13 +17212,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   runner: {fileID: 2132338267}
-  gate: {fileID: 2042939942}
-  charge: {fileID: 11400000, guid: 15fa3c4cff2cce34397cba4a2abf98c8, type: 2}
-  roll: {fileID: 11400000, guid: 6c5e411ee9598d74a9ca4abfc27169f9, type: 2}
-  blink: {fileID: 11400000, guid: 476cb25248634294fbb0b8dca7fe6fa0, type: 2}
-  conflagrate: {fileID: 11400000, guid: 18fef7418fb5fa74a8277ca0492a4455, type: 2}
-  snipe: {fileID: 11400000, guid: 0be9550b12873d14dbf4269fde529825, type: 2}
-  smash: {fileID: 0}
+  warriorCharge: {fileID: 11400000, guid: 15fa3c4cff2cce34397cba4a2abf98c8, type: 2}
+  archerRoll: {fileID: 11400000, guid: 6c5e411ee9598d74a9ca4abfc27169f9, type: 2}
+  mageBlink: {fileID: 11400000, guid: 476cb25248634294fbb0b8dca7fe6fa0, type: 2}
+  mageConflagrate: {fileID: 11400000, guid: 18fef7418fb5fa74a8277ca0492a4455, type: 2}
+  archerSnipe: {fileID: 11400000, guid: 2c9fa4a5ac4a6bc4cabfb6ff82a0f7de, type: 2}
+  warriorSmash: {fileID: 11400000, guid: 8ddaba4f9f8432f49843c252a57b3c58, type: 2}
 --- !u!1 &2049142298
 GameObject:
   m_ObjectHideFlags: 0
@@ -18110,9 +18109,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   coordinator: {fileID: 2042939940}
-  playerAnimator: {fileID: 0}
-  respectRange: 1
+  orchestrator: {fileID: 1336666327}
+  visuals: {fileID: 951330227}
   blockWhileCasting: 1
+  respectRange: 1
 --- !u!1 &2134498967
 GameObject:
   m_ObjectHideFlags: 0

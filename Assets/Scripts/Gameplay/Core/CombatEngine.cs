@@ -9,6 +9,11 @@ namespace Core.Combat
         public int Level, Hp, MaxHp, Atk, Def, Xp;
         public float PosX;                // NEW: canonical 1D position
         public bool IsDead => Hp <= 0;
+
+        public int Shield;             // absorbs incoming damage first
+        public float StunTimer;        // >0 means stunned
+        public float AtkBuffTimer;     // example: temporary ATK buff
+        public float AtkBuffMultiplier;// e.g., 1.25f
     }
 
     public struct EngineConfig
@@ -18,7 +23,7 @@ namespace Core.Combat
         public int XpRewardOnKill;
     }
 
-    public enum CombatEventType { AttackStarted, AttackImpact, DamageApplied, UnitDied, XpGained, LeveledUp, Respawned }
+    public enum CombatEventType { AttackStarted, AttackImpact, DamageApplied, UnitDied, XpGained, LeveledUp, Respawned, Healed }
 
     public readonly struct CombatEvent
     {
@@ -103,6 +108,16 @@ namespace Core.Combat
                         _impacts.Add(new PendingImpact { side = Side.Player, time = tImpact, isProjectileArrival = false });
                         _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Player));
                     }
+                }
+                if (Player.AtkBuffTimer > 0f)
+                {
+                    Player.AtkBuffTimer -= dt;
+                    if (Player.AtkBuffTimer <= 0f) Player.AtkBuffMultiplier = 1f;
+                }
+
+                if (Enemy.StunTimer > 0f)
+                {
+                    Enemy.StunTimer -= dt;
                 }
 
                 // === Enemy cadence ===
@@ -237,6 +252,74 @@ namespace Core.Combat
                 }
             }
         }
+        private int ApplyShieldThenHp(ref FighterState target, int rawDamage)
+        {
+            int remaining = rawDamage;
+
+            if (target.Shield > 0)
+            {
+                int absorbed = System.Math.Min(target.Shield, remaining);
+                target.Shield -= absorbed;
+                remaining -= absorbed;
+            }
+
+            if (remaining > 0)
+                target.Hp = System.Math.Max(0, target.Hp - remaining);
+
+            return remaining; // how much actually hit HP
+        }
+
+        public void ApplyPureDamageToEnemy(int amount)
+        {
+            if (amount <= 0) return;
+            ApplyShieldThenHp(ref Enemy, amount);
+            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, amount));
+            if (Enemy.IsDead)
+            {
+                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
+                Player.Xp += Config.XpRewardOnKill;
+                _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
+            }
+        }
+
+        public void ApplyPureDamageToPlayer(int amount)
+        {
+            if (amount <= 0) return;
+            ApplyShieldThenHp(ref Player, amount);
+            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, amount));
+            if (Player.IsDead)
+                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+        }
+
+        public void HealPlayer(int amount)
+        {
+            if (amount <= 0) return;
+
+            Player.Hp = System.Math.Min(Player.MaxHp, Player.Hp + amount);
+
+            // Optional event if you add one; otherwise omit.
+            _emit(new CombatEvent(CombatEventType.Healed, Side.Player, amount));
+        }
+
+        public void AddShieldToPlayer(int amount)
+        {
+            if (amount <= 0) return;
+            Player.Shield += amount;
+        }
+
+        public void StunEnemy(float seconds)
+        {
+            if (seconds <= 0f) return;
+            Enemy.StunTimer = System.Math.Max(Enemy.StunTimer, seconds);
+        }
+
+        public void KnockbackEnemy(float dx)
+        {
+            Enemy.PosX += dx;
+            // visuals will pick up Enemy.PosX in your Orchestrator
+        }
+
+
 
         /// <summary>
         /// Apply damage that is not tied to the normal attack cadence.

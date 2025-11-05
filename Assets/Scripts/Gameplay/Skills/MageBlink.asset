@@ -13,21 +13,29 @@ MonoBehaviour:
   m_Name: MageBlink
   m_EditorClassIdentifier: 
   displayName: blink
-  role: 0
-  movement: 3
+  kind: 0
   castTime: 0.2
   cooldown: 6
-  moveDuration: 0.25
   grantsIFrames: 0
   iFrameDuration: 0.2
-  moveDistance: 3
-  isPureDamage: 0
-  damageMultiplier: 1
-  flatBonusDamage: 0
-  usesProjectile: 0
-  projectileSpeedOverride: 0
+  respectRange: 1
   minRangeToUse: 0
   maxRangeToUse: 999
+  targeting: 1
+  areaRadius: 1.25
+  moveDistance: -3
+  moveDuration: 0.25
+  useProjectile: 0
+  projectileSpeed: 6
+  damageType: 0
+  damageMultiplier: 1
+  flatBonusDamage: 0
+  ccType: 0
+  ccDuration: 1
+  ccMagnitude: 2
+  supportType: 0
+  supportAmount: 20
+  supportDuration: 5
   vfxOnCast: {fileID: 0}
   vfxOnTravel: {fileID: 0}
   vfxOnLand: {fileID: 0}

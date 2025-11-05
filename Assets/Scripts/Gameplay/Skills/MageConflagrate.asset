@@ -13,21 +13,29 @@ MonoBehaviour:
   m_Name: MageConflagrate
   m_EditorClassIdentifier: 
   displayName: Conflagrate
-  role: 1
-  movement: 0
+  kind: 1
   castTime: 0.2
   cooldown: 5
-  moveDuration: 0
   grantsIFrames: 0
   iFrameDuration: 0.2
-  moveDistance: 0
-  isPureDamage: 1
-  damageMultiplier: 1
-  flatBonusDamage: 50
-  usesProjectile: 0
-  projectileSpeedOverride: 0
+  respectRange: 1
   minRangeToUse: 0
   maxRangeToUse: 999
+  targeting: 1
+  areaRadius: 1.25
+  moveDistance: 0
+  moveDuration: 0
+  useProjectile: 0
+  projectileSpeed: 6
+  damageType: 1
+  damageMultiplier: 1
+  flatBonusDamage: 50
+  ccType: 0
+  ccDuration: 1
+  ccMagnitude: 2
+  supportType: 0
+  supportAmount: 20
+  supportDuration: 5
   vfxOnCast: {fileID: 0}
   vfxOnTravel: {fileID: 0}
   vfxOnLand: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}

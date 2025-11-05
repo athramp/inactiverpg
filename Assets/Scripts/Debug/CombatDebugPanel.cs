@@ -33,19 +33,20 @@ public class CombatDebugPanel : MonoBehaviour
         int xpNext = loop.XpTable.GetXpToNextLevel(prog.Level);
 
         // Optional: also show runtime combat stats from GameLoopService
-        var ps = loop.Player;
-        playerText.text = $"PLAYER\n" +
-                          $"Lv {prog.Level}\n" +
-                          $"HP {ps.Hp}/{ps.MaxHp}\n" +
-                          $"ATK {ps.Atk}  DEF {ps.Def}\n" +
-                          $"XP {xpInto}/{xpNext}";
+        // var ps = loop.Player;
+        // playerText.text = $"PLAYER\n" +
+        //                   $"Lv {prog.Level}\n" +
+        //                   $"HP {ps.Hp}/{ps.MaxHp}\n" +
+        //                   $"ATK {ps.Atk}  DEF {ps.Def}\n" +
+                          
             if (eng != null)
     {
-        playerText.text +=
+        playerText.text =
             $"\n\nPLAYER (engine)\n" +
             $"Lv {eng.Player.Level}\n" +
             $"HP {eng.Player.Hp}/{eng.Player.MaxHp}\n" +
-            $"ATK {eng.Player.Atk}  DEF {eng.Player.Def}";
+            $"ATK {eng.Player.Atk}  DEF {eng.Player.Def}" +
+            $"XP {xpInto}/{xpNext}";
     }                  
     }
 }

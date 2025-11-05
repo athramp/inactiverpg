@@ -77,7 +77,7 @@ public class CampPanel : MonoBehaviour
 
         // Live HP/ATK/DEF from GameLoopService (authoritative runtime stats)
         var ps = loop.Player;
-        if (HPText)   HPText.text   = $"HP {ps.Hp}/{ps.MaxHp}";
+        if (HPText)   HPText.text   = $"HP {eng.Player.Hp}/{eng.Player.MaxHp}";
         if (StatsText) StatsText.text = $"ATK {ps.Atk}  •  DEF {ps.Def}";
     }
 

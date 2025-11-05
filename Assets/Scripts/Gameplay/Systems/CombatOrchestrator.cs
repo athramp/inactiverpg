@@ -9,7 +9,8 @@ public class CombatOrchestrator : MonoBehaviour
     public PlayerSpaceCoordinator coordinator;
     public static CombatOrchestrator Instance => _instance;
 public float PlayerLogicalX => _engine?.Player.PosX ?? 0f;
-public float EnemyLogicalX  => _engine?.Enemy.PosX  ?? 10f;
+    public float EnemyLogicalX => _engine?.Enemy.PosX ?? 10f;
+public int   PlayerAtk => _engine?.Player.Atk ?? 0;
 [SerializeField] private bool  engineMovesEnemy = true;
 [SerializeField] private float desiredGap = 3f;     // units
 [SerializeField] private float enemyApproachSpeed = 3f; // units/sec (your old “Approach Speed”)
@@ -49,7 +50,8 @@ public float EnemyLogicalX  => _engine?.Enemy.PosX  ?? 10f;
     [Header("References")]
     public BattleVisualController visuals; // assign in inspector
     public GameLoopService gameLoop;       // existing owner of Player/Enemy/Class/XpTable
-
+    public float PlayerX => _engine?.Player.PosX ?? 0f;
+    public float EnemyX  => _engine?.Enemy.PosX  ?? 0f;
     [Header("Debug Settings")]
     [SerializeField] private bool enableDebug = true;
     // [SerializeField] private float playerAttackRate = 2.5f;
@@ -71,6 +73,12 @@ public float EnemyLogicalX  => _engine?.Enemy.PosX  ?? 10f;
     public CombatEngine DebugEngine => _engine; // used by debug panels
     // Freeze enemy position after death
     private float _enemyDeathX = 0f;   // where the dead body should stay
+    public void CO_ApplyDamageToEnemy(int amount) => _engine?.ApplyPureDamageToEnemy(amount);
+    public void CO_ApplyDamageToPlayer(int amount) => _engine?.ApplyPureDamageToPlayer(amount);
+    public void CO_HealPlayer(int amount)         => _engine?.HealPlayer(amount);
+    public void CO_AddShieldToPlayer(int amount)  => _engine?.AddShieldToPlayer(amount);
+    public void CO_StunEnemy(float seconds)       => _engine?.StunEnemy(seconds);
+    public void CO_KnockbackEnemy(float dx)       => _engine?.KnockbackEnemy(dx);
     private IEnumerator Start()
     {
         // coordinator.AnchorPlayerVisuallyToLeft();
@@ -301,7 +309,12 @@ public float EnemyLogicalX  => _engine?.Enemy.PosX  ?? 10f;
     else
         visuals.SetEnemyX(_engine.Enemy.PosX);
 }
-
+public void ForceRefreshHpUI_Player()
+{
+        if (_engine == null || visuals == null) return;
+    Debug.Log($"[CO] ForceRefreshHpUI_Player: Hp={_engine.Player.Hp}, MaxHp={_engine.Player.MaxHp}");
+    visuals.SetPlayerHp(_engine.Player.Hp, _engine.Player.MaxHp);
+}
 
     private bool IsPlayerRanged() => (_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f;
     private bool IsEnemyRanged() => (_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f;
@@ -331,21 +344,31 @@ public float EnemyLogicalX  => _engine?.Enemy.PosX  ?? 10f;
                     break;
                 
             case CombatEventType.AttackImpact:
-            {
-                try
+                    {
+                        try
+                        {
+                            Debug.Log($"[CO] AttackImpact routed: {evt.Actor} ETA={evt.ProjectileETA:F2}s (useEngineDrive={visuals.useEngineDrive})");
+                            if (evt.Actor == Side.Player)
+                                visuals.OnPlayerAttackImpactWithETA(evt.ProjectileETA);
+                            else
+                                visuals.OnEnemyAttackImpactWithETA(evt.ProjectileETA);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            Debug.LogError($"[CO] Exception in AttackImpact handling: {ex}");
+                        }
+                        break;
+                    }
+                case CombatEventType.Healed:
+                if (evt.Actor == Side.Player)
                 {
-                    Debug.Log($"[CO] AttackImpact routed: {evt.Actor} ETA={evt.ProjectileETA:F2}s (useEngineDrive={visuals.useEngineDrive})");
-                    if (evt.Actor == Side.Player)
-                        visuals.OnPlayerAttackImpactWithETA(evt.ProjectileETA);
-                    else
-                        visuals.OnEnemyAttackImpactWithETA(evt.ProjectileETA);
+                    visuals.SetPlayerHp(_engine.Player.Hp, _engine.Player.MaxHp);
                 }
-                catch (System.Exception ex)
+                else
                 {
-                    Debug.LogError($"[CO] Exception in AttackImpact handling: {ex}");
+                    visuals.SetEnemyHp(_engine.Enemy.Hp, _engine.Enemy.MaxHp);
                 }
                 break;
-            }
             case CombatEventType.UnitDied:
                     if (evt.Actor == Side.Enemy)
                     {

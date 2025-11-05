@@ -1,249 +1,237 @@
+// Assets/Scripts/Gameplay/Skills/SkillRunner.cs
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using Core.Combat;
 
 public class SkillRunner : MonoBehaviour
 {
     [Header("Refs")]
-    [SerializeField] private PlayerSpaceCoordinator coordinator;   // assign in Inspector
-    [SerializeField] private Animator playerAnimator;              // optional
+    [SerializeField] private PlayerSpaceCoordinator coordinator;   // world shifting + player visual motion
+    [SerializeField] private CombatOrchestrator orchestrator;      // engine wrappers
+    [SerializeField] private BattleVisualController visuals;       // VFX helpers
 
     [Header("Tuning")]
-    [SerializeField] private bool respectRange = true;             // uses min/max from SkillProfile
-    [SerializeField] private bool blockWhileCasting = true;        // prevents overlapping casts
+    public bool blockWhileCasting = true; // set animation bool if you want
+    public bool respectRange = true;      // fallback if profile.respectRange unset
 
-    private readonly Dictionary<SkillProfile, float> _cooldownUntil = new();
-    private bool _casting;
-
-    public void RunSkill(SkillProfile skill)
+    public void RunSkill(SkillProfile profile)
     {
-        if (!isActiveAndEnabled || skill == null || coordinator == null) return;
-
-        // cooldown gate
-        if (_cooldownUntil.TryGetValue(skill, out var until) && Time.time < until) return;
-
-        // block overlap if desired
-        if (blockWhileCasting && _casting) return;
-
-        // range gate (logical 1D space)
-        if (respectRange && !InRange(skill)) return;
-
-        StartCoroutine(CastRoutine(skill));
+        Debug.Log($"[SkillRunner] RunSkill {profile.name}");
+        if (!profile || !coordinator || !orchestrator || !visuals) return;
+        StartCoroutine(CastRoutine(profile));
     }
 
-    private IEnumerator CastRoutine(SkillProfile skill)
+    IEnumerator CastRoutine(SkillProfile s)
     {
-        _casting = true;
-
-        // ----- VFX: On Cast (spawn at player's muzzle/root; parent under world root) -----
-        if (skill.vfxOnCast)
-        {
-            var co  = CombatOrchestrator.Instance;
-            var bvc = co ? co.visuals : null;
-            var pos = bvc ? bvc.GetPlayerWorldPosition() : coordinator.transform.position;
-            var go  = Instantiate(skill.vfxOnCast, pos, Quaternion.identity);
-            var wr  = bvc ? bvc.GetWorldRoot() : null;
-            if (wr) go.transform.SetParent(wr, worldPositionStays: true);
-            AutoDestroy.Attach(go);
-        }
-
-        // Optional anim trigger from MovementMode
-        if (playerAnimator)
-        {
-            switch (skill.movement)
-            {
-                case MovementMode.DashToward: playerAnimator.SetTrigger("Charge"); break;
-                case MovementMode.DashAway:   playerAnimator.SetTrigger("Roll");   break;
-                case MovementMode.BlinkAway:  playerAnimator.SetTrigger("Blink");  break;
-                case MovementMode.None:       break;
-            }
-        }
-
-        // Cast time
-        if (skill.castTime > 0f)
-            yield return new WaitForSeconds(skill.castTime);
-
-        // Logical positions at fire time
-        float selfX  = coordinator.LogicalX;
-        float enemyX = GetEnemyLogicalX(selfX);
-
-        // Displacement delta (0 for pure-damage)
-        float dx = ComputeDisplacement(skill, selfX, enemyX);
-
-        // ---------- DAMAGE ROLE ----------
-        if (skill.isPureDamage || skill.role == SkillRole.Damage)
-        {
-            // compute ETA if projectile is used; else 0 (instant)
-            float eta = 0f;
-            float projectileSpeed = 0f;
-
-            if (skill.usesProjectile)
-            {
-                projectileSpeed = skill.projectileSpeedOverride;
-                if (projectileSpeed <= 0f)
-                {
-                    var co = CombatOrchestrator.Instance;
-                    if (co != null)
-                        projectileSpeed = co.DebugEngine?.PlayerAttack?.projectileSpeed ?? 0f;
-                }
-                if (projectileSpeed > 0f)
-                    eta = Mathf.Abs(enemyX - selfX) / projectileSpeed;
-            }
-
-            // tell the engine to apply damage (truth)
-            var orchestrator = CombatOrchestrator.Instance;
-            if (orchestrator != null && orchestrator.DebugEngine != null)
-            {
-                orchestrator.DebugEngine.ApplyPureDamage(
-                    Side.Player,
-                    skill.damageMultiplier,
-                    skill.flatBonusDamage,
-                    eta
-                );
-            }
-            else
-            {
-                Debug.LogWarning("[SkillRunner] Engine not available to ApplyPureDamage.");
-            }
-
-            // ----- VFX: Travel (projectile) -----
-            if (skill.usesProjectile)
-            {
-                var co  = CombatOrchestrator.Instance;
-                var bvc = co ? co.visuals : null;
-                if (bvc)
-                {
-                    var projectilePrefab = skill.vfxOnTravel != null
-                        ? skill.vfxOnTravel
-                        : null; // fallback to default player projectile if you want
-
-                    if (projectilePrefab != null && projectileSpeed > 0f)
-                        bvc.SpawnSkillProjectile(projectilePrefab, projectileSpeed);
-                }
-            }
-
-            // ----- VFX: Land -----
-            if (!skill.usesProjectile && skill.vfxOnLand)
-            {
-                var co  = CombatOrchestrator.Instance;
-                var bvc = co ? co.visuals : null;
-                var pos = bvc ? bvc.GetEnemyWorldPosition() : coordinator.transform.position;
-                var go  = Instantiate(skill.vfxOnLand, pos, Quaternion.identity);
-                var wr  = bvc ? bvc.GetWorldRoot() : null;
-                if (wr) go.transform.SetParent(wr, worldPositionStays: true);
-                AutoDestroy.Attach(go);
-            }
-            if (skill.usesProjectile && skill.vfxOnLand && eta > 0f)
-            {
-                StartCoroutine(SpawnLandVfxAfter(eta, skill.vfxOnLand));
-            }
-
-            // cooldown + exit
-            _cooldownUntil[skill] = Time.time + Mathf.Max(0f, skill.cooldown);
-            _casting = false;
+        // Range gate (1D)
+        if ((s.respectRange || respectRange) && !InRange(s))
             yield break;
+
+        // Optional: set animator flags here via visuals.playerAnimator
+        if (blockWhileCasting) ; // e.g., set a "Casting" bool
+
+        // Cast VFX
+        SpawnCastVfx(s);
+
+        // i-frames (optional)
+        if (s.grantsIFrames) StartCoroutine(IFrames(s.iFrameDuration));
+
+        // Pre-cast wait
+        if (s.castTime > 0f) yield return new WaitForSeconds(s.castTime);
+
+        switch (s.kind)
+        {
+            case SkillKind.Displacement:
+                yield return DoDisplacement(s);
+                break;
+
+            case SkillKind.Damage:
+                yield return DoDamage(s);
+                break;
+
+            case SkillKind.CrowdControl:
+                yield return DoCrowdControl(s);
+                break;
+
+            case SkillKind.Support:
+                yield return DoSupport(s);
+                break;
         }
 
-        // ---------- DISPLACEMENT ----------
-        // i-frames could be handled here if/when you add a damage gate.
-        if (skill.movement == MovementMode.BlinkAway || skill.moveDuration <= 0f)
+        // Optional land VFX for non-projectile impacts
+        SpawnLandVfxIfDirect(s);
+
+        // End casting flag
+        if (blockWhileCasting) ; // unset animator flag
+    }
+
+    // ---------- Range checks ----------
+    bool InRange(SkillProfile s)
+    {
+        float selfX  = orchestrator.PlayerX;
+        float enemyX = orchestrator.EnemyX;
+        float dist   = Mathf.Abs(enemyX - selfX);
+        return dist >= s.minRangeToUse && dist <= s.maxRangeToUse;
+    }
+
+    int OrientationToEnemy() => (orchestrator.EnemyX - orchestrator.PlayerX) >= 0f ? +1 : -1;
+
+    // ---------- Kinds ----------
+    IEnumerator DoDisplacement(SkillProfile s)
+    {
+        float dir = OrientationToEnemy();  // +toward enemy, -away
+        float dx  = s.moveDistance * dir;
+        if (s.moveDuration <= 0.001f)
         {
-            if (Mathf.Abs(dx) > 1e-6f)
-                coordinator.RequestPlayerDisplacement(dx);
+            // blink: instant
+            coordinator.RequestPlayerDisplacement(dx);
         }
         else
         {
-            float elapsed = 0f;
-            float last = 0f;
-            float dur = Mathf.Max(0.0001f, skill.moveDuration);
-
-            while (elapsed < dur)
+            float t = 0f;
+            while (t < s.moveDuration)
             {
-                elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / dur);
-                float step = Mathf.Lerp(0f, dx, t) - last;
-                last += step;
-
-                if (Mathf.Abs(step) > 1e-6f)
-                    coordinator.RequestPlayerDisplacement(step);
-
+                float step = dx * (Time.deltaTime / s.moveDuration);
+                coordinator.RequestPlayerDisplacement(step);
+                t += Time.deltaTime;
                 yield return null;
             }
         }
+    }
 
-        // optional land VFX on displacement
-        if (skill.vfxOnLand)
+    IEnumerator DoDamage(SkillProfile s)
+    {
+        // compute engine damage (multiplier + flat)
+        // You could ask the engine for current ATK and DEF, but a simple “pure damage”
+        // matches your current ApplyPureDamage pattern.
+        int baseAtk = orchestrator.PlayerAtk;
+        int dmg = Mathf.Max(1, Mathf.RoundToInt(baseAtk * s.damageMultiplier) + s.flatBonusDamage);
+
+        if (s.useProjectile && s.vfxOnTravel)
         {
-            var co  = CombatOrchestrator.Instance;
-            var bvc = co ? co.visuals : null;
-            var pos = bvc ? bvc.GetEnemyWorldPosition() : coordinator.transform.position;
-            var go  = Instantiate(skill.vfxOnLand, pos, Quaternion.identity);
-            var wr  = bvc ? bvc.GetWorldRoot() : null;
-            if (wr) go.transform.SetParent(wr, worldPositionStays: true);
-            AutoDestroy.Attach(go);
+            // Visual projectile (engine damage is still time-locked by the engine if you want,
+            // but for pure skills we apply on land to “feel right”)
+            Vector3 from = visuals.GetPlayerWorldPosition();
+            Vector3 to   = visuals.GetEnemyWorldPosition();
+            float dist   = Mathf.Abs(to.x - from.x);
+            float tta    = (s.projectileSpeed > 0.001f) ? dist / s.projectileSpeed : 0.2f;
+
+            // Fire projectile using your existing VFX pipeline
+            visuals.SpawnSkillProjectile(s.vfxOnTravel, s.projectileSpeed);
+
+            // Wait for arrival
+            yield return new WaitForSeconds(tta);
+
+            // Land VFX + engine damage
+            SpawnLandVfxAtEnemy(s);
+            orchestrator.CO_ApplyDamageToEnemy(dmg);
         }
-
-        // start cooldown
-        _cooldownUntil[skill] = Time.time + Mathf.Max(0f, skill.cooldown);
-        _casting = false;
-    }
-
-    private bool InRange(SkillProfile s)
-    {
-        float selfX  = coordinator.LogicalX;
-        float enemyX = GetEnemyLogicalX(selfX);
-        float dist   = Mathf.Abs(enemyX - selfX);
-
-        if (s.minRangeToUse > 0f && dist < s.minRangeToUse) return false;
-        if (s.maxRangeToUse > 0f && dist > s.maxRangeToUse) return false;
-        return true;
-    }
-
-    private float ComputeDisplacement(SkillProfile s, float selfX, float enemyX)
-    {
-        if (s.role != SkillRole.Displacement || s.movement == MovementMode.None)
-            return 0f;
-
-        float dirToEnemy = Mathf.Sign(enemyX - selfX);
-        if (dirToEnemy == 0f) dirToEnemy = 1f;
-
-        switch (s.movement)
+        else
         {
-            case MovementMode.DashToward: return  +s.moveDistance * dirToEnemy; // Charge
-            case MovementMode.DashAway:   return  -s.moveDistance * dirToEnemy; // Roll
-            case MovementMode.BlinkAway:  return  -s.moveDistance * dirToEnemy; // Blink
-            default:                      return  0f;
+            // Instant hit (melee burst, beam, etc.)
+            SpawnLandVfxAtEnemy(s);
+            orchestrator.CO_ApplyDamageToEnemy(dmg);
         }
+        yield return null;
     }
 
-    private float GetEnemyLogicalX(float fallbackFromSelf)
+    IEnumerator DoCrowdControl(SkillProfile s)
     {
-        var co = CombatOrchestrator.Instance;
-        if (co != null)
+        switch (s.ccType)
         {
-            try { return co.EnemyLogicalX; }
-            catch { }
+            case CCType.Stun:
+                orchestrator.CO_StunEnemy(s.ccDuration);
+                SpawnLandVfxAtEnemy(s);
+                break;
 
-            if (co.DebugEngine != null)
-                return co.DebugEngine.Enemy.PosX;
+            case CCType.Knockback:
+                // Positive magnitude pushes enemy away from player
+                float dir = OrientationToEnemy(); // +enemy on right, -enemy on left
+                orchestrator.CO_KnockbackEnemy(+s.ccMagnitude * dir);
+                SpawnLandVfxAtEnemy(s);
+                break;
+
+            case CCType.Pull:
+                dir = OrientationToEnemy();
+                orchestrator.CO_KnockbackEnemy(-s.ccMagnitude * dir);
+                SpawnLandVfxAtEnemy(s);
+                break;
+
+            case CCType.Slow:
+                // You can implement slow in engine (attack speed debuff). For now, stun-lite:
+                orchestrator.CO_StunEnemy(Mathf.Min(s.ccDuration * 0.4f, s.ccDuration));
+                SpawnLandVfxAtEnemy(s);
+                break;
         }
-        return fallbackFromSelf + 5f; // safe fallback
+        yield return null;
     }
 
-    private IEnumerator SpawnLandVfxAfter(float t, GameObject prefab)
+    IEnumerator DoSupport(SkillProfile s)
     {
-        if (!prefab) yield break;
-        yield return new WaitForSeconds(t);
+        switch (s.supportType)
+        {
+            case SupportType.Heal:
+                orchestrator.CO_HealPlayer(s.supportAmount);
+                orchestrator.ForceRefreshHpUI_Player();
+                Debug.Log($"[SkillRunner] Healed player for {s.supportAmount}");
+                SpawnLandVfxSelf(s);
+                break;
 
-        var co  = CombatOrchestrator.Instance;
-        var bvc = co ? co.visuals : null;
-        if (!bvc) yield break;
+            case SupportType.Shield:
+                orchestrator.CO_AddShieldToPlayer(s.supportAmount);
+                SpawnLandVfxSelf(s);
+                break;
 
-        var pos = bvc.GetEnemyWorldPosition();
-        var go  = Instantiate(prefab, pos, Quaternion.identity);
-        var wr  = bvc.GetWorldRoot();
-        if (wr) go.transform.SetParent(wr, worldPositionStays: true);
-        AutoDestroy.Attach(go);
+            case SupportType.BuffAtk:
+                // Example: push buff into engine: set Player.AtkBuffTimer/Multiplier (you can add wrapper)
+                // orchestrator.Engine_PlayerStartAtkBuff(s.supportDuration, 1.25f); // add small wrapper if you want
+                SpawnLandVfxSelf(s);
+                break;
+
+            case SupportType.Haste:
+                // You can later add “attack rate multiplier” in engine config
+                // For now you can reuse Atk buff or skip
+                SpawnLandVfxSelf(s);
+                break;
+        }
+        yield return null;
+    }
+
+    // ---------- VFX helpers ----------
+    void SpawnCastVfx(SkillProfile s)
+    {
+        if (!s.vfxOnCast) return;
+        var root = visuals.GetWorldRoot();
+        var go = Instantiate(s.vfxOnCast, visuals.GetPlayerWorldPosition(), Quaternion.identity, root);
+        AutoDestroy.Attach(go, 2.0f);
+    }
+
+    void SpawnLandVfxIfDirect(SkillProfile s)
+    {
+        if (!s.vfxOnLand) return;
+        if (s.kind == SkillKind.Damage && s.useProjectile) return; // handled on arrival
+        var root = visuals.GetWorldRoot();
+        var pos = (s.targeting == TargetingType.Self) ? visuals.GetPlayerWorldPosition() : visuals.GetEnemyWorldPosition();
+        var go = Instantiate(s.vfxOnLand, pos, Quaternion.identity, root);
+        AutoDestroy.Attach(go, 2.0f);
+    }
+
+    void SpawnLandVfxAtEnemy(SkillProfile s)
+    {
+        if (!s.vfxOnLand) return;
+        var go = Instantiate(s.vfxOnLand, visuals.GetEnemyWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+        AutoDestroy.Attach(go, 2.0f);
+    }
+
+    void SpawnLandVfxSelf(SkillProfile s)
+    {
+        if (!s.vfxOnLand) return;
+        var go = Instantiate(s.vfxOnLand, visuals.GetPlayerWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+        AutoDestroy.Attach(go, 2.0f);
+    }
+
+    IEnumerator IFrames(float seconds)
+    {
+        // Hook your damage intake gate here if needed
+        yield return new WaitForSeconds(seconds);
     }
 }
