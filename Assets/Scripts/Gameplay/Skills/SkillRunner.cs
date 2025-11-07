@@ -139,6 +139,7 @@ public class SkillRunner : MonoBehaviour
         switch (s.ccType)
         {
             case CCType.Stun:
+            Debug.Log("[SkillRunner] CC: Stun enemy for: " + s.ccDuration + " seconds.");
                 orchestrator.CO_StunEnemy(s.ccDuration);
                 SpawnLandVfxAtEnemy(s);
                 break;

@@ -90,7 +90,7 @@ namespace Core.Combat
                     ? PlayerAttack.period
                     : System.Math.Max(0.01f, Config.PlayerAttackRateSec);
 
-                if (!_playerAwaitingImpact && _pTimer >= pPeriod)
+                if (!_playerAwaitingImpact && _pTimer >= pPeriod && Player.StunTimer <= 0f)
                 {
                     float reach = (PlayerAttack != null ? PlayerAttack.reach : 1.5f);
                     bool inStartRange = Distance1D() <= reach;
@@ -128,7 +128,7 @@ namespace Core.Combat
                     ? EnemyAttack.period
                     : System.Math.Max(0.01f, Config.EnemyAttackRateSec);
 
-                if (!_enemyAwaitingImpact && _eTimer >= ePeriod)
+                if (!_enemyAwaitingImpact && _eTimer >= ePeriod && Enemy.StunTimer <= 0f)
                 {
                     float reach = (EnemyAttack != null ? EnemyAttack.reach : 1.5f);
                     bool inStartRange = Distance1D() <= reach;
@@ -327,11 +327,13 @@ namespace Core.Combat
         {
             if (seconds <= 0f) return;
             Enemy.StunTimer = System.Math.Max(Enemy.StunTimer, seconds);
+            CancelPendingImpact(Side.Enemy);
         }
         public void StunPlayer(float seconds)
         {
             if (seconds <= 0f) return;
             Player.StunTimer = System.Math.Max(Player.StunTimer, seconds);
+            CancelPendingImpact(Side.Player);
         }
 
         public void KnockbackEnemy(float dx)
@@ -395,6 +397,7 @@ namespace Core.Combat
             {
                 _playerAwaitingImpact = false;
                 _pAwaitTimer = 0f;
+                if (Player.IsDead || Player.StunTimer > 0f) return;
 
                 float reach = (PlayerAttack != null ? PlayerAttack.reach : 1.5f);
                 bool inReach = Distance1D() <= reach;
@@ -428,7 +431,7 @@ namespace Core.Combat
             {
                 _enemyAwaitingImpact = false;
                 _eAwaitTimer = 0f;
-
+                if (Enemy.IsDead || Enemy.StunTimer > 0f) return;
                 float reach = (EnemyAttack != null ? EnemyAttack.reach : 1.5f);
                 bool inReach = Distance1D() <= reach;
                 if (!inReach) return;

@@ -31,17 +31,20 @@ void Awake() {
 // --- VFX helpers ---
 void SpawnCastVfx(SkillProfile s) {
     if (!visuals || !s.vfxOnCast) return;
-    Instantiate(s.vfxOnCast, visuals.GetEnemyWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+     var go =   Instantiate(s.vfxOnCast, visuals.GetEnemyWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+    AutoDestroy.Attach(go);
 }
 
 void SpawnLandVfxAtPlayer(SkillProfile s) {
     if (!visuals || !s.vfxOnLand) return;
-    Instantiate(s.vfxOnLand, visuals.GetPlayerWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+      var go =  Instantiate(s.vfxOnLand, visuals.GetPlayerWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+    AutoDestroy.Attach(go);
 }
 
 void SpawnLandVfxSelf(SkillProfile s) {
     if (!visuals || !s.vfxOnLand) return;
-    Instantiate(s.vfxOnLand, visuals.GetEnemyWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+        var go = Instantiate(s.vfxOnLand, visuals.GetEnemyWorldPosition(), Quaternion.identity, visuals.GetWorldRoot());
+    AutoDestroy.Attach(go);
 }
 
 IEnumerator SpawnProjectileTravel(SkillProfile s, float duration) {

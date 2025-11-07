@@ -25,7 +25,7 @@ MonoBehaviour:
   areaRadius: 1.25
   moveDistance: 0
   moveDuration: 0
-  useProjectile: 0
+  useProjectile: 1
   projectileSpeed: 6
   damageType: 1
   damageMultiplier: 1
@@ -37,5 +37,5 @@ MonoBehaviour:
   supportAmount: 20
   supportDuration: 5
   vfxOnCast: {fileID: 0}
-  vfxOnTravel: {fileID: 0}
+  vfxOnTravel: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
   vfxOnLand: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}

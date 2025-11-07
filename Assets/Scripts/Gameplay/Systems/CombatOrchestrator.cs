@@ -360,7 +360,7 @@ public bool CanPlayerAct()
 
     // 2) Optional: simple enemy gap AI in logical space (CO only)
     var e = _engine.Enemy;
-    if (engineMovesEnemy && !_enemyRespawning)
+    if (engineMovesEnemy && !_enemyRespawning && CanEnemyAct())
     {
         float dir = Mathf.Sign(p.PosX - e.PosX);
         if (dir == 0f) dir = 1f;  // tie-breaker to avoid NaN
