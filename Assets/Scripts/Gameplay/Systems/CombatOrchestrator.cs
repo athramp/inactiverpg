@@ -74,6 +74,12 @@ public bool CanEnemyAct(EnemyUnit u) {
         yield return new WaitUntil(() => gameLoop && gameLoop.IsInitialized && gameLoop.StatsReady && FirebaseGate.IsReady);
         visuals.ApplyPlayerClass(gameLoop.Player.ClassId);
         playerAttackProfile = SelectProfile(gameLoop.Player.ClassId);
+        if (!playerProgression)
+        {
+            playerProgression = FindObjectOfType<PlayerProgression>();
+            if (!playerProgression)
+                Debug.LogWarning("[CombatOrchestrator] PlayerProgression not assigned; XP gains will be skipped.");
+        }
         // Seed engine
         var p = new FighterState
         {
@@ -382,9 +388,6 @@ public bool CanEnemyAct(EnemyUnit u) {
                     StartCoroutine(Co_PlayerRespawn());
                 break;
 
-            case CombatEventType.XpGained:
-                visuals.SetXp(gameLoop.Player.CurrentXp, gameLoop.XpTable.GetXpToNextLevel(gameLoop.Player.Level));
-                break;
         }
     }
     IEnumerator Co_PlayerRespawn()
@@ -423,19 +426,15 @@ public bool CanEnemyAct(EnemyUnit u) {
         var anim = u.view ? u.view.GetComponentInChildren<Animator>(true) : null;
         if (anim) anim.SetBool(visuals.Param_DeadBool, true);
 
-        // XP: grant via PlayerProgression (authoritative UI source)
+        // XP: grant via PlayerProgression (single source of truth)
         int xp = u.def ? u.def.xpReward : 0;
-        if (xp > 0)
+        if (xp > 0 && playerProgression)
         {
-            var prog = playerProgression;
-            if (prog) prog.AddXp(xp);
-
-            // Optional: keep GameLoop’s snapshot in sync if you show it elsewhere
-            if (gameLoop && gameLoop.Player != null)
-                gameLoop.Player.CurrentXp = prog ? prog.XpIntoLevel : (gameLoop.Player.CurrentXp + xp);
-
-            // Optional UI hook (if you use it)
-            visuals.SetXp(prog ? prog.XpIntoLevel : 0, gameLoop.XpTable.GetXpToNextLevel(prog ? prog.Level : gameLoop.Player.Level));
+            playerProgression.AddXp(xp);
+        }
+        else if (xp > 0 && !playerProgression)
+        {
+            Debug.LogWarning("[CombatOrchestrator] Cannot award XP because PlayerProgression is missing.");
         }
 
         yield return new WaitForSeconds(0.6f);

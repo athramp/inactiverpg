@@ -8,7 +8,12 @@ public class CombatUI : MonoBehaviour
     public Slider EnemyHPBar;
     public CombatOrchestrator orchestrator;
     [SerializeField] PlayerProgression playerProgression;
-    [SerializeField] GameLoopService game;
+
+    void Awake()
+    {
+        if (!playerProgression)
+            playerProgression = FindObjectOfType<PlayerProgression>();
+    }
 
     void Start()
     {
@@ -27,10 +32,12 @@ public class CombatUI : MonoBehaviour
         PlayerHPBar.maxValue = eng.Player.MaxHp;
         PlayerHPBar.value    = eng.Player.Hp;
 
-        // XP bar
-        int xpToNext = game.XpTable.GetXpToNextLevel(eng.Player.Level);
-        PlayerXPBar.maxValue = xpToNext;
-        PlayerXPBar.value    = playerProgression.XpIntoLevel;
+        // XP bar (driven purely from PlayerProgression)
+        if (playerProgression)
+        {
+            PlayerXPBar.maxValue = Mathf.Max(1, playerProgression.XpToNextLevel);
+            PlayerXPBar.value    = Mathf.Clamp(playerProgression.XpIntoLevel, 0, PlayerXPBar.maxValue);
+        }
 
         // Enemy HP bar → current target (multi-enemy)
         var target = orchestrator.CurrentTarget;

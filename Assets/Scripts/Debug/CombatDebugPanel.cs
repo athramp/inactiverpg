@@ -9,13 +9,18 @@ public class CombatDebugPanel : MonoBehaviour
     public TMP_Text playerText;
     public TMP_Text enemyText;
     public CombatOrchestrator orchestrator;
+    [SerializeField] private PlayerProgression playerProgression;
+
+    void Awake()
+    {
+        if (!playerProgression)
+            playerProgression = FindObjectOfType<PlayerProgression>();
+    }
 
     void Update()
     {
         if (!orchestrator) return;
         var eng  = orchestrator.DebugEngine;
-        var loop = orchestrator.gameLoop;
-        var prog = FindObjectOfType<PlayerProgression>();
 
         // ---- Enemy (current target from orchestrator) ----
         if (enemyText)
@@ -38,13 +43,13 @@ public class CombatDebugPanel : MonoBehaviour
         }
 
         // ---- Player (progression + engine stats) ----
-        if (playerText && prog != null && loop != null && loop.XpTable != null)
+        if (playerText && playerProgression != null)
         {
-            int xpInto = prog.XpIntoLevel;
-            int xpNext = loop.XpTable.GetXpToNextLevel(prog.Level);
+            int xpInto = playerProgression.XpIntoLevel;
+            int xpNext = playerProgression.XpToNextLevel;
 
             string s = $"PLAYER\n" +
-                       $"Lv {prog.Level}\n";
+                       $"Lv {playerProgression.Level}\n";
 
             if (eng != null)
             {
