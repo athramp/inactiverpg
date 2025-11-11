@@ -20,6 +20,7 @@ public class AttackProfile : ScriptableObject
     public float variance = 0f;         // 0..1 (optional)
     public float critChance = 0f;       // 0..1
     public float critMult = 2f;         // 2x default
+    public GameObject projectilePrefab; 
 
     // You can extend later with status effects, tags, etc.
 }

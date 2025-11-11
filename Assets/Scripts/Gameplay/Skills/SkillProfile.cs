@@ -14,6 +14,8 @@ public class SkillProfile : ScriptableObject
 {
     [Header("Basics")]
     public string displayName = "New Skill";
+    public Sprite icon;
+    [TextArea] public string description;
     public SkillKind kind = SkillKind.Damage;
     public float castTime = 0.15f;
     public float cooldown = 6f;
@@ -24,6 +26,12 @@ public class SkillProfile : ScriptableObject
     public bool respectRange = true;
     public float minRangeToUse = 0f;
     public float maxRangeToUse = 999f;
+
+    [Header("Damage over Time (optional)")]
+    public bool appliesDot;
+    public int   dotDamagePerTick;
+    public float dotTickEvery = 1f;
+    public float dotDuration  = 3f;
 
     [Header("Targeting")]
     public TargetingType targeting = TargetingType.Enemy;

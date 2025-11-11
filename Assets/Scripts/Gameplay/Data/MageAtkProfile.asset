@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea93c88189e67c043a49119fcfc9e5d8, type: 3}
   m_Name: MageAtkProfile
   m_EditorClassIdentifier: 
-  period: 4
+  period: 3
   windup: 0
-  kind: 3
+  kind: 2
   reach: 30
   projectileSpeed: 15
   aoeRadius: 1
@@ -22,3 +22,4 @@ MonoBehaviour:
   variance: 0
   critChance: 0
   critMult: 2
+  projectilePrefab: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}

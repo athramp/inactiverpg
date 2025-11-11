@@ -7,7 +7,10 @@ using Firebase.Firestore;
 
 public class PlayerPersistenceService : MonoBehaviour
 {
+    [Header("Refs")]
     public GameLoopService gameLoop;
+
+    [Header("Saving")]
     public float autosaveIntervalSec = 15f;
 
     string ServerId => PlayerPrefs.GetString("serverId", "WindlessDesert18");
@@ -22,45 +25,52 @@ public class PlayerPersistenceService : MonoBehaviour
 
         var user = FirebaseAuth.DefaultInstance.CurrentUser;
         if (user == null) { Debug.LogWarning("[Progress] No user."); return; }
-        if (gameLoop == null) { Debug.LogError("[Progress] 'gameLoop' not assigned on PlayerPersistenceService."); return; }
+        if (gameLoop == null) { Debug.LogError("[Progress] 'gameLoop' not assigned."); return; }
+
         var docRef = db.Collection("servers").Document(ServerId)
                        .Collection("characters").Document(user.UserId);
 
         try
         {
             var snap = await docRef.GetSnapshotAsync();
-            if (!snap.Exists) { Debug.Log("[Progress] No doc yet."); return; }
+            if (!snap.Exists) { Debug.Log("[Progress] No character doc yet."); return; }
 
             var d = snap.ToDictionary();
 
-            string classId = d.TryGetValue("class", out var c) ? c?.ToString() : "Warrior";
+            string classId = d.TryGetValue("class", out var c) ? (c?.ToString() ?? "Warrior") : "Warrior";
             int level = d.TryGetValue("level", out var lv) && lv != null ? System.Convert.ToInt32(lv) : 1;
-            int xp    = d.TryGetValue("xp", out var xpv) && xpv != null ? System.Convert.ToInt32(xpv) : 0;
-            int hp    = d.TryGetValue("hp", out var hpv) && hpv != null ? System.Convert.ToInt32(hpv) : 0;
+            int xpIntoLevel = d.TryGetValue("xp", out var xpv) && xpv != null ? System.Convert.ToInt32(xpv) : 0;
+            int hp = d.TryGetValue("hp", out var hpv) && hpv != null ? System.Convert.ToInt32(hpv) : 0;
+            string displayName = (d.TryGetValue("name", out var n) && n is string nameStr && !string.IsNullOrWhiteSpace(nameStr)) ? nameStr : "Hero";
 
-            // Initialize loop if not yet, then apply progress
             if (!gameLoop.IsInitialized)
-            {
-                if (string.IsNullOrEmpty(classId)) classId = "Warrior";
-                gameLoop.Initialize(classId);
-            }
-            gameLoop.Player.ApplyProgress(classId, level, xp, hp);
-            // NEW: set display name from the document if present
-            string displayName = "Hero";
-            if (d.TryGetValue("name", out var n) && n is string s && !string.IsNullOrWhiteSpace(s))
-                displayName = s;
-            Debug.Log($"[Persistence] Loaded name: {displayName}");
+                gameLoop.Initialize(string.IsNullOrEmpty(classId) ? "Warrior" : classId);
+
             gameLoop.SetPlayerDisplayName(displayName);
-            // Convert saved "into-level XP" to total XP expected by PlayerProgression
+
+            // Apply to runtime
+            gameLoop.Player.ApplyProgress(classId, level, xpIntoLevel, hp);
             var progression = FindObjectOfType<PlayerProgression>();
             if (progression)
             {
-                int totalXp = xp + gameLoop.XpTable.GetXpToReachLevel(level);
+                int totalXp = xpIntoLevel + gameLoop.XpTable.GetXpToReachLevel(level);
                 progression.InitializeFromSave(level, totalXp);
             }
             gameLoop.Player.ApplyLevelAndRecalculate(level, healToFull: false);
-            gameLoop.MarkStatsReady();
-            Debug.Log($"[Progress] Loaded: {classId} L{level} xp:{xp} hp:{hp}");
+
+            // Restore skill loadout (optional)
+            var loadout = FindObjectOfType<SkillLoadout>();
+            if (loadout && loadout.catalog && d.TryGetValue("skillLoadout", out var arr) && arr is object[] saved)
+            {
+                for (int i = 0; i < loadout.slots.Length && i < saved.Length; i++)
+                {
+                    var skillName = saved[i]?.ToString();
+                    var skillProfile = loadout.catalog.all.Find(p => p && p.name == skillName); // renamed var (no shadowing)
+                    loadout.SetSlot(i, skillProfile);
+                }
+            }
+
+            Debug.Log($"[Progress] Loaded: name='{displayName}' class={classId} L{level} xpInto={xpIntoLevel} hp={hp}");
         }
         catch (System.Exception e)
         {
@@ -81,16 +91,28 @@ public class PlayerPersistenceService : MonoBehaviour
 
         try
         {
-            if (user == null || gameLoop == null || gameLoop.Player == null) return;
+            // Sync PlayerProgression → Player before saving
             var prog = FindObjectOfType<PlayerProgression>();
-            if (prog != null && gameLoop?.Player != null)
+            if (prog != null)
             {
                 gameLoop.Player.Level     = prog.Level;
-                gameLoop.Player.CurrentXp = prog.XpIntoLevel; // keep "into-level" XP in Firestore
+                gameLoop.Player.CurrentXp = prog.XpIntoLevel; // store into-level XP
             }
+
+            // Base map from your existing mapper
             var data = gameLoop.Player.ToFirestoreProgress();
+
+            // Add skill loadout (optional)
+            var loadout = FindObjectOfType<SkillLoadout>();
+            if (loadout && loadout.catalog)
+            {
+                var ids = new string[loadout.slots.Length];
+                for (int i = 0; i < ids.Length; i++)
+                    ids[i] = loadout.slots[i] ? loadout.slots[i].name : "";
+                data["skillLoadout"] = ids;
+            }
+
             await docRef.SetAsync(data, SetOptions.MergeAll);
-            
             Debug.Log("[Progress] Saved");
         }
         catch (System.Exception e)
@@ -100,12 +122,11 @@ public class PlayerPersistenceService : MonoBehaviour
     }
 
     void OnApplicationPause(bool paused) { if (paused) _ = SaveProgressAsync(); }
-    void OnApplicationQuit() { _ = SaveProgressAsync(); }
+    void OnApplicationQuit()             { _ = SaveProgressAsync(); }
 
     IEnumerator Start()
     {
-        // Optional autosave loop
-        var wait = new WaitForSeconds(autosaveIntervalSec);
+        var wait = new WaitForSeconds(Mathf.Max(3f, autosaveIntervalSec));
         while (true) { yield return wait; _ = SaveProgressAsync(); }
     }
 }

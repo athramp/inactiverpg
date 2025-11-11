@@ -11,44 +11,49 @@ public class CombatDebugPanel : MonoBehaviour
     public CombatOrchestrator orchestrator;
 
     void Update()
-{
-    if (!orchestrator) return;
-    var eng  = orchestrator.DebugEngine;
-    var loop = orchestrator.gameLoop;
-    var prog = FindObjectOfType<PlayerProgression>();
-
-    // Enemy from engine is fine
-    if (eng != null && enemyText)
     {
-        enemyText.text = $"ENEMY\n" +
-                         $"Lv {eng.Enemy.Level}\n" +
-                         $"HP {eng.Enemy.Hp}/{eng.Enemy.MaxHp}\n" +
-                         $"ATK {eng.Enemy.Atk}  DEF {eng.Enemy.Def}";
-    }
+        if (!orchestrator) return;
+        var eng  = orchestrator.DebugEngine;
+        var loop = orchestrator.gameLoop;
+        var prog = FindObjectOfType<PlayerProgression>();
 
-    // Player: show PROGRESSION as source of truth
-    if (playerText && prog != null && loop != null && loop.XpTable != null)
-    {
-        int xpInto = prog.XpIntoLevel;
-        int xpNext = loop.XpTable.GetXpToNextLevel(prog.Level);
+        // ---- Enemy (current target from orchestrator) ----
+        if (enemyText)
+        {
+            var u = orchestrator.CurrentTarget;
+            if (u != null)
+            {
+                string name = u.def ? u.def.monsterId : $"Enemy#{u.enemyId}";
+                enemyText.text =
+                    $"ENEMY\n" +
+                    $"{name}\n" +
+                    $"HP {u.hp}/{u.maxHp}\n" +
+                    $"ATK {u.atk}  DEF {u.defStat}\n" +
+                    $"X {u.posX:0.00}";
+            }
+            else
+            {
+                enemyText.text = "ENEMY\nNone";
+            }
+        }
 
-        // Optional: also show runtime combat stats from GameLoopService
-        // var ps = loop.Player;
-        // playerText.text = $"PLAYER\n" +
-        //                   $"Lv {prog.Level}\n" +
-        //                   $"HP {ps.Hp}/{ps.MaxHp}\n" +
-        //                   $"ATK {ps.Atk}  DEF {ps.Def}\n" +
-                          
+        // ---- Player (progression + engine stats) ----
+        if (playerText && prog != null && loop != null && loop.XpTable != null)
+        {
+            int xpInto = prog.XpIntoLevel;
+            int xpNext = loop.XpTable.GetXpToNextLevel(prog.Level);
+
+            string s = $"PLAYER\n" +
+                       $"Lv {prog.Level}\n";
+
             if (eng != null)
-    {
-        playerText.text =
-            $"\n\nPLAYER (engine)\n" +
-            $"Lv {eng.Player.Level}\n" +
-            $"HP {eng.Player.Hp}/{eng.Player.MaxHp}\n" +
-            $"ATK {eng.Player.Atk}  DEF {eng.Player.Def}" +
-            $"XP {xpInto}/{xpNext}";
-    }                  
-    }
-}
+            {
+                s += $"HP {eng.Player.Hp}/{eng.Player.MaxHp}\n" +
+                     $"ATK {eng.Player.Atk}  DEF {eng.Player.Def}\n";
+            }
 
+            s += $"XP {xpInto}/{xpNext}";
+            playerText.text = s;
+        }
+    }
 }

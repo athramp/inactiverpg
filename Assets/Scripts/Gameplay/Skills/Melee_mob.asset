@@ -10,30 +10,24 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 79bdd6d83646d7c45a09ee5b987ab0bf, type: 3}
-  m_Name: MageConflagrate
+  m_Name: Melee_mob
   m_EditorClassIdentifier: 
-  displayName: Conflagrate
-  icon: {fileID: 0}
-  description: 
+  displayName: Melee
   kind: 1
-  castTime: 0.2
-  cooldown: 5
+  castTime: 0
+  cooldown: 2
   grantsIFrames: 0
   iFrameDuration: 0.2
   respectRange: 1
   minRangeToUse: 0
-  maxRangeToUse: 999
-  appliesDot: 1
-  dotDamagePerTick: 8
-  dotTickEvery: 1
-  dotDuration: 3
+  maxRangeToUse: 1.2
   targeting: 1
   areaRadius: 1.25
-  moveDistance: 0
-  moveDuration: 0
-  useProjectile: 1
+  moveDistance: 3
+  moveDuration: 0.2
+  useProjectile: 0
   projectileSpeed: 6
-  damageType: 1
+  damageType: 0
   damageMultiplier: 1
   flatBonusDamage: 0
   ccType: 0
@@ -43,5 +37,5 @@ MonoBehaviour:
   supportAmount: 20
   supportDuration: 5
   vfxOnCast: {fileID: 0}
-  vfxOnTravel: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
-  vfxOnLand: {fileID: 1541055265320442182, guid: f9ad3d5a5cf09754bbf7bf6709e671d5, type: 3}
+  vfxOnTravel: {fileID: 0}
+  vfxOnLand: {fileID: 0}

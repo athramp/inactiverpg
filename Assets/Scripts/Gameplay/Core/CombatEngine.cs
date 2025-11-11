@@ -3,487 +3,228 @@ using System.Collections.Generic;
 namespace Core.Combat
 {
     public enum Side { Player, Enemy }
-    public struct CombatActorId { public int Value; } // immutable handle
-    public struct TeamId { public byte Value; } // 0=players,1=monsters,...
+
     public struct FighterState
     {
         public int Level, Hp, MaxHp, Atk, Def, Xp;
-        public float PosX;                // NEW: canonical 1D position
+        public float PosX;
         public bool IsDead => Hp <= 0;
-        public CombatActorId ActorId; // optional link to higher-level actor
-        public TeamId Team;
-        public int Shield;             // absorbs incoming damage first
-        public float StunTimer;        // >0 means stunned
-        public float AtkBuffTimer;     // example: temporary ATK buff
-        public float AtkBuffMultiplier;// e.g., 1.25f
+        public int Shield;
+        public float StunTimer;
+        public float AtkBuffTimer;
+        public float AtkBuffMultiplier;
     }
 
     public struct EngineConfig
     {
-        public float PlayerAttackRateSec;
-        public float EnemyAttackRateSec;
-        public int XpRewardOnKill;
+        public float PlayerAttackRateSec;   // if 0, defaults to 1.0
+        public int   XpRewardOnKill;
     }
 
-    public enum CombatEventType { AttackStarted, AttackImpact, DamageApplied, UnitDied, XpGained, LeveledUp, Respawned, Healed }
+    public enum CombatEventType { AttackStarted, AttackImpact, DamageApplied, UnitDied, XpGained, Healed }
 
     public readonly struct CombatEvent
     {
         public readonly CombatEventType Type;
         public readonly Side Actor;
-        public readonly int Amount;          // damage or xp when relevant
-        public readonly float ProjectileETA; // seconds; 0 for melee/hitscan
-
-        // Generic ctor (non-projectile use)
-        public CombatEvent(CombatEventType t, Side a, int amt = 0)
-        { Type = t; Actor = a; Amount = amt; ProjectileETA = 0f; }
-
-        // Projectile impact/spawn moment (includes ETA)
-        public CombatEvent(CombatEventType t, Side a, float eta)
-        { Type = t; Actor = a; Amount = 0; ProjectileETA = eta; }
+        public readonly int Amount;          // damage/xp
+        public readonly float ProjectileETA;
+        public CombatEvent(CombatEventType t, Side a, int amt = 0) { Type=t; Actor=a; Amount=amt; ProjectileETA=0f; }
+        public CombatEvent(CombatEventType t, Side a, float eta)   { Type=t; Actor=a; Amount=0;   ProjectileETA=eta; }
     }
 
     public sealed class CombatEngine
     {
-        // If damageOverride != null, use that exact damage (e.g., skills).
-        private struct PendingImpact
-        {
-            public Side side;
-            public float time;
-            public bool isProjectileArrival;
-            public int? damageOverride;
-        }
-        public AttackProfile PlayerAttack; // NEW
-        public AttackProfile EnemyAttack;  // NEW
-        public FighterState Player;
-        public FighterState Enemy;
-        public EngineConfig Config;
-        // === Time & cadence ===
-        private float _now;                 // engine time (seconds)
-        private float _pTimer;              // accumulates time until Player period elapses
-        private float _eTimer;              // accumulates time until Enemy period elapses
-        private bool _playerAwaitingImpact; // between AttackStarted and impact resolution
-        private bool _enemyAwaitingImpact;
-        private float Distance1D() => (float)System.Math.Abs(Player.PosX - Enemy.PosX);
-        // private struct PendingImpact { public Side side; public float time; }
-        private readonly List<PendingImpact> _impacts = new List<PendingImpact>();
-
-        // awaiting-impact guards
-        float _pAwaitTimer, _eAwaitTimer;
-        // === NEW: impact scheduler ===
         public delegate void EventSink(in CombatEvent e);
-        readonly EventSink _emit;
+        private readonly EventSink _emit;
 
-        public CombatEngine(FighterState player, FighterState enemy, EngineConfig cfg, EventSink sink)
-        { Player = player; Enemy = enemy; Config = cfg; _emit = sink; }
+        // Player
+        public FighterState Player;
+        public EngineConfig Config;
 
+        // Proxy enemy X for player cadence/range gate (set by orchestrator each frame)
+        public float EnemyProxyX { get; set; }
+
+        // Multi-enemy state
+        private readonly Dictionary<int, FighterState> _enemies = new();
+        private int _nextEnemyId = 1;
+        public int  EnemyCount => _enemies.Count;
+        public bool HasEnemy(int enemyId) => _enemies.ContainsKey(enemyId);
+
+        // Cadence (player basic)
+        private float _now, _pTimer;
+        public float PlayerReach = 1.6f; // set by orchestrator
+        public float PlayerPeriodSec = 1.0f;   // set by orchestrator if you have AttackProfile.period
+        // ---- DoT model ----
+        private struct Dot
+        {
+            public int dmgPerTick;
+            public float tickEvery;
+            public float nextTick;
+            public float remaining;
+        }
+        private readonly List<Dot> _playerDots = new();
+        private readonly Dictionary<int, List<Dot>> _enemyDots = new();
+
+        // Public API
+        public void ApplyDotToEnemy(int enemyId, int dmgPerTick, float duration, float tickEvery)
+        {
+            if (dmgPerTick <= 0 || duration <= 0f || tickEvery <= 0f) return;
+            if (!_enemies.ContainsKey(enemyId)) return;
+            if (!_enemyDots.TryGetValue(enemyId, out var list)) { list = new List<Dot>(); _enemyDots[enemyId] = list; }
+            list.Add(new Dot { dmgPerTick = dmgPerTick, tickEvery = tickEvery, nextTick = tickEvery, remaining = duration });
+        }
+        public void ApplyDotToPlayer(int dmgPerTick, float duration, float tickEvery)
+        {
+            if (dmgPerTick <= 0 || duration <= 0f || tickEvery <= 0f) return;
+            _playerDots.Add(new Dot { dmgPerTick = dmgPerTick, tickEvery = tickEvery, nextTick = tickEvery, remaining = duration });
+        }
+
+        public CombatEngine(FighterState player, EngineConfig cfg, EventSink sink)
+        {
+            Player = player;
+            Config = cfg;
+            _emit  = sink;
+            Player.AtkBuffMultiplier = Player.AtkBuffMultiplier == 0f ? 1f : Player.AtkBuffMultiplier;
+        }
+
+        // ----- Multi-enemy API -----
+        public int AddEnemy(FighterState state)
+        {
+            int id = _nextEnemyId++;
+            _enemies[id] = state;
+            return id;
+        }
+        public bool RemoveEnemy(int enemyId) => _enemies.Remove(enemyId);
+        public bool TryGetEnemy(int enemyId, out FighterState state) => _enemies.TryGetValue(enemyId, out state);
+        public bool UpdateEnemy(int enemyId, in FighterState state)
+        { if (!_enemies.ContainsKey(enemyId)) return false; _enemies[enemyId] = state; return true; }
+        public IEnumerable<(int id, FighterState state)> AllEnemies()
+        {
+            foreach (var kv in new List<KeyValuePair<int, FighterState>>(_enemies))
+                yield return (kv.Key, kv.Value);
+        }
+
+        // ----- Central damage paths -----
+        public void DealDamageToEnemy(int targetEnemyId, int amount)
+        {
+            if (amount <= 0) return;
+            if (!_enemies.TryGetValue(targetEnemyId, out var fs)) return;
+
+            amount = ApplyShieldThenHp(ref fs, amount);
+            _enemies[targetEnemyId] = fs;
+
+            _emit?.Invoke(new CombatEvent(CombatEventType.DamageApplied, Side.Player, amount));
+            if (fs.Hp == 0)
+            {
+                _emit?.Invoke(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
+            }
+        }
+
+        public void DealDamageToPlayer(int amount)
+        {
+            if (amount <= 0) return;
+            amount = ApplyShieldThenHp(ref Player, amount);
+            _emit?.Invoke(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, amount));
+            if (Player.IsDead)
+                _emit?.Invoke(new CombatEvent(CombatEventType.UnitDied, Side.Player));
+        }
+
+        public void HealPlayer(int amount)
+        {
+            if (amount <= 0) return;
+            Player.Hp = System.Math.Min(Player.MaxHp, Player.Hp + amount);
+            _emit?.Invoke(new CombatEvent(CombatEventType.Healed, Side.Player, amount));
+        }
+        public void AddShieldToPlayer(int amount)
+        { if (amount > 0) Player.Shield += amount; }
+
+        public void StunPlayer(float seconds)
+        {
+            if (seconds <= 0f) return;
+            Player.StunTimer = System.Math.Max(Player.StunTimer, seconds);
+        }
+
+        // ----- Tick (buffs/cc + player auto cadence) -----
         public void Tick(float dt)
         {
             _now += dt;
 
-            // 1) Advance cadence and schedule impacts after windup (only if both alive)
-            if (!Player.IsDead && !Enemy.IsDead)
+            // decay player timers
+            if (Player.AtkBuffTimer > 0f)
             {
-                // === Player cadence ===
+                Player.AtkBuffTimer -= dt;
+                if (Player.AtkBuffTimer <= 0f) Player.AtkBuffMultiplier = 1f;
+            }
+            if (Player.StunTimer > 0f) Player.StunTimer -= dt;
+
+            // decay enemy stuns
+            if (_enemies.Count != 0)
+            {
+                var snapshot = new List<int>(_enemies.Keys);
+                foreach (var id in snapshot)
+                {
+                    var fs = _enemies[id];
+                    if (fs.StunTimer > 0f) { fs.StunTimer -= dt; if (fs.StunTimer < 0f) fs.StunTimer = 0f; _enemies[id] = fs; }
+                }
+            }
+
+            // basic player auto attack cadence vs proxy X
+            float period = PlayerPeriodSec > 0f ? PlayerPeriodSec : (Config.PlayerAttackRateSec > 0f ? Config.PlayerAttackRateSec : 1f);
+            if (!Player.IsDead && _enemies.Count > 0)
+            {
                 _pTimer += dt;
-                float pPeriod = (PlayerAttack != null && PlayerAttack.period > 0f)
-                    ? PlayerAttack.period
-                    : System.Math.Max(0.01f, Config.PlayerAttackRateSec);
-
-                if (!_playerAwaitingImpact && _pTimer >= pPeriod && Player.StunTimer <= 0f)
+                // range check vs proxy X; orchestrator locks proxy to current target’s X
+                bool inRange = System.Math.Abs(Player.PosX - EnemyProxyX) <= PlayerReach;
+                if (_pTimer >= period && Player.StunTimer <= 0f && inRange)
                 {
-                    float reach = (PlayerAttack != null ? PlayerAttack.reach : 1.5f);
-                    bool inStartRange = Distance1D() <= reach;
-
-                    if (!inStartRange)
-                    {
-                        // keep the timer "charged" so it will start the instant we come into range
-                        _pTimer = pPeriod;
-                    }
-                    else
-                    {
-                        _pTimer -= pPeriod;
-                        _playerAwaitingImpact = true;
-                        _pAwaitTimer = 0f;
-
-                        float tImpact = _now + (PlayerAttack != null ? System.Math.Max(0f, PlayerAttack.windup) : 0f);
-                        _impacts.Add(new PendingImpact { side = Side.Player, time = tImpact, isProjectileArrival = false });
-                        _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Player));
-                    }
-                }
-                if (Player.AtkBuffTimer > 0f)
-                {
-                    Player.AtkBuffTimer -= dt;
-                    if (Player.AtkBuffTimer <= 0f) Player.AtkBuffMultiplier = 1f;
-                }
-
-                if (Enemy.StunTimer > 0f)
-                {
-                    Enemy.StunTimer -= dt;
-                }
-
-                // === Enemy cadence ===
-                _eTimer += dt;
-                float ePeriod = (EnemyAttack != null && EnemyAttack.period > 0f)
-                    ? EnemyAttack.period
-                    : System.Math.Max(0.01f, Config.EnemyAttackRateSec);
-
-                if (!_enemyAwaitingImpact && _eTimer >= ePeriod && Enemy.StunTimer <= 0f)
-                {
-                    float reach = (EnemyAttack != null ? EnemyAttack.reach : 1.5f);
-                    bool inStartRange = Distance1D() <= reach;
-
-                    if (!inStartRange)
-                    {
-                        _eTimer = ePeriod; // arm it; will start as soon as we enter range
-                    }
-                    else
-                    {
-                        _eTimer -= ePeriod;
-                        _enemyAwaitingImpact = true;
-                        _eAwaitTimer = 0f;
-
-                        float tImpact = _now + (EnemyAttack != null ? System.Math.Max(0f, EnemyAttack.windup) : 0f);
-                        _impacts.Add(new PendingImpact { side = Side.Enemy, time = tImpact, isProjectileArrival = false });
-                        _emit(new CombatEvent(CombatEventType.AttackStarted, Side.Enemy));
-                    }
+                    _pTimer -= period;
+                    _emit?.Invoke(new CombatEvent(CombatEventType.AttackStarted, Side.Player));
+                    // hitscan: emit immediate impact (no per-enemy id here; orchestrator routes to target)
+                    _emit?.Invoke(new CombatEvent(CombatEventType.AttackImpact, Side.Player, 0f));
                 }
             }
-
-            // 2) Optional timeouts (prevent stuck awaits) — make them windup-aware
-            if (_playerAwaitingImpact)
+            // --- Tick DoTs on player ---
+            for (int i = _playerDots.Count - 1; i >= 0; i--)
             {
-                _pAwaitTimer += dt;
-                // Allow at least windup + small slack; never cancel early
-                float pAllowed = ((PlayerAttack?.windup) ?? 0f) + 0.5f;        // 0.5s slack
-                // Also guard against extreme stalls: e.g., > 10s
-                float pHardCap = System.Math.Max(10f, pAllowed * 4f);
-
-                if (_pAwaitTimer > pHardCap)
-                {
-                    // Only then cancel the stuck await; DO NOT use tiny timeouts
-                    _playerAwaitingImpact = false;
-                    _pAwaitTimer = 0f;
-                    // Debug.Log("[Engine] Player await timed out (hard cap)"); // optional
-                }
+                var d = _playerDots[i];
+                d.remaining -= dt; d.nextTick -= dt;
+                if (d.nextTick <= 0f) { DealDamageToPlayer(d.dmgPerTick); d.nextTick += d.tickEvery; }
+                if (d.remaining <= 0f) _playerDots.RemoveAt(i); else _playerDots[i] = d;
             }
 
-            if (_enemyAwaitingImpact)
+            // --- Tick DoTs on enemies ---
+            if (_enemyDots.Count > 0)
             {
-                _eAwaitTimer += dt;
-                float eAllowed = ((EnemyAttack?.windup) ?? 0f) + 0.5f;
-                float eHardCap = System.Math.Max(10f, eAllowed * 4f);
-
-                if (_eAwaitTimer > eHardCap)
+                var keys = new List<int>(_enemyDots.Keys);
+                foreach (var eid in keys)
                 {
-                    _enemyAwaitingImpact = false;
-                    _eAwaitTimer = 0f;
-                    // Debug.Log("[Engine] Enemy await timed out (hard cap)"); // optional
-                }
-            }
-
-
-            // 3) Resolve due impacts (deterministic order: time then side)
-            if (_impacts.Count > 1)
-                _impacts.Sort((a, b) => a.time != b.time ? a.time.CompareTo(b.time) : a.side.CompareTo(b.side));
-
-            int i = 0;
-            while (i < _impacts.Count && _impacts[i].time <= _now)
-            {
-                var imp = _impacts[i];
-                _impacts.RemoveAt(i);
-
-                if (imp.isProjectileArrival)
-                {
-                    // If a skill scheduled an exact damage, use it verbatim:
-                    if (imp.damageOverride.HasValue)
+                    var list = _enemyDots[eid];
+                    for (int i = list.Count - 1; i >= 0; i--)
                     {
-                        int dmg = imp.damageOverride.Value;
-                        if (imp.side == Side.Player)
-                        {
-                            Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
-                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
-                            if (Enemy.IsDead)
-                            {
-                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                                Player.Xp += Config.XpRewardOnKill;
-                                _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
-                            }
-                        }
-                        else
-                        {
-                            Player.Hp = System.Math.Max(0, Player.Hp - dmg);
-                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
-                            if (Player.IsDead)
-                            {
-                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
-                            }
-                        }
+                        var d = list[i];
+                        d.remaining -= dt; d.nextTick -= dt;
+                        if (d.nextTick <= 0f) { DealDamageToEnemy(eid, d.dmgPerTick); d.nextTick += d.tickEvery; }
+                        if (d.remaining <= 0f) list.RemoveAt(i); else list[i] = d;
                     }
-                    else
-                    {
-                        // Existing projectile-arrival behavior (normal attacks)
-                        if (imp.side == Side.Player)
-                        {
-                            int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-                            Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
-                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
-                            if (Enemy.IsDead)
-                            {
-                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                                Player.Xp += Config.XpRewardOnKill;
-                                _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
-                            }
-                        }
-                        else // Enemy projectile arrival
-                        {
-                            int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-                            Player.Hp = System.Math.Max(0, Player.Hp - dmg);
-                            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
-                            if (Player.IsDead)
-                            {
-                                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // Melee/hitscan impact (unchanged)
-                    ResolveImpact(imp.side);
+                    if (list.Count == 0) _enemyDots.Remove(eid);
                 }
             }
         }
-        private int ApplyShieldThenHp(ref FighterState target, int rawDamage)
-        {
-            int remaining = rawDamage;
 
+        // helpers
+        private static int ApplyShieldThenHp(ref FighterState target, int raw)
+        {
+            int remaining = raw;
             if (target.Shield > 0)
             {
                 int absorbed = System.Math.Min(target.Shield, remaining);
                 target.Shield -= absorbed;
                 remaining -= absorbed;
             }
-
             if (remaining > 0)
                 target.Hp = System.Math.Max(0, target.Hp - remaining);
-
-            return remaining; // how much actually hit HP
-        }
-
-        public void ApplyPureDamageToEnemy(int amount)
-        {
-            if (amount <= 0) return;
-            ApplyShieldThenHp(ref Enemy, amount);
-            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, amount));
-            if (Enemy.IsDead)
-            {
-                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                Player.Xp += Config.XpRewardOnKill;
-                _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
-            }
-        }
-
-        public void ApplyPureDamageToPlayer(int amount)
-        {
-            if (amount <= 0) return;
-            ApplyShieldThenHp(ref Player, amount);
-            _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, amount));
-            if (Player.IsDead)
-                _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
-        }
-
-        public void HealPlayer(int amount)
-        {
-            if (amount <= 0) return;
-
-            Player.Hp = System.Math.Min(Player.MaxHp, Player.Hp + amount);
-
-            // Optional event if you add one; otherwise omit.
-            _emit(new CombatEvent(CombatEventType.Healed, Side.Player, amount));
-        }
-        public void HealEnemy(int amount)
-        {
-            if (amount <= 0) return;
-
-            Enemy.Hp = System.Math.Min(Enemy.MaxHp, Enemy.Hp + amount);
-
-            // Optional event if you add one; otherwise omit.
-            _emit(new CombatEvent(CombatEventType.Healed, Side.Enemy, amount));
-        }
-
-        public void AddShieldToPlayer(int amount)
-        {
-            if (amount <= 0) return;
-            Player.Shield += amount;
-        }
-        public void AddShieldToEnemy(int amount)
-        {
-            if (amount <= 0) return;
-            Enemy.Shield += amount;
-        }
-
-        public void StunEnemy(float seconds)
-        {
-            if (seconds <= 0f) return;
-            Enemy.StunTimer = System.Math.Max(Enemy.StunTimer, seconds);
-            CancelPendingImpact(Side.Enemy);
-        }
-        public void StunPlayer(float seconds)
-        {
-            if (seconds <= 0f) return;
-            Player.StunTimer = System.Math.Max(Player.StunTimer, seconds);
-            CancelPendingImpact(Side.Player);
-        }
-
-        public void KnockbackEnemy(float dx)
-        {
-            Enemy.PosX += dx;
-            // visuals will pick up Enemy.PosX in your Orchestrator
-        }
-
-
-        /// <summary>
-        /// Apply damage that is not tied to the normal attack cadence.
-        /// etaSec > 0 delays the hit; otherwise it lands immediately.
-        /// </summary>
-        public void ApplyPureDamage(Side source, float multiplier, int flatBonus, float etaSec = 0f)
-        {
-            // Decide attacker/defender
-            ref FighterState atk = ref (source == Side.Player ? ref Player : ref Enemy);
-            ref FighterState def = ref (source == Side.Player ? ref Enemy  : ref Player);
-
-            // Base damage via your existing calculator
-            int baseDmg  = DamageCalculator.ComputeDamage(atk.Atk, def.Def);
-            int finalDmg = System.Math.Max(0, (int)System.Math.Round(baseDmg * multiplier) + flatBonus);
-
-            if (etaSec <= 0f)
-            {
-                // Apply now (reuse the same path you use when a normal hit lands)
-                def.Hp = System.Math.Max(0, def.Hp - finalDmg);
-                _emit(new CombatEvent(CombatEventType.DamageApplied, source, finalDmg));
-
-                // Death + XP (mirror your existing logic)
-                if ((source == Side.Player && def.IsDead))
-                {
-                    _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                    Player.Xp += Config.XpRewardOnKill;
-                    _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
-                }
-                else if (source == Side.Enemy && def.IsDead)
-                {
-                    _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
-                }
-            }
-            else
-            {
-                // Schedule for later; we mark isProjectileArrival=true to reuse the arrival slot,
-                // but we carry damageOverride so we don't recompute damage at resolution.
-                _impacts.Add(new PendingImpact
-                {
-                    side = source,
-                    time = _now + etaSec,
-                    isProjectileArrival = true,
-                    damageOverride = finalDmg
-                });
-            }
-        }
-        public void UpdateEnemy(FighterState s) { Enemy = s; }
-        private void ResolveImpact(Side side)
-        {
-            if (Player.IsDead || Enemy.IsDead) return;
-
-            if (side == Side.Player)
-            {
-                _playerAwaitingImpact = false;
-                _pAwaitTimer = 0f;
-                if (Player.IsDead || Player.StunTimer > 0f) return;
-
-                float reach = (PlayerAttack != null ? PlayerAttack.reach : 1.5f);
-                bool inReach = Distance1D() <= reach;
-                if (!inReach) return; // silent whiff
-
-                float projSpeed = (PlayerAttack != null ? PlayerAttack.projectileSpeed : 0f);
-                if (projSpeed > 0f)
-                {
-                    // Spawn projectile VFX now (with ETA)
-                    float flight = Distance1D() / System.Math.Max(0.01f, projSpeed);
-                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player, (float)flight));
-
-                    // Schedule damage on arrival
-                    _impacts.Add(new PendingImpact { side = Side.Player, time = _now + flight, isProjectileArrival = true });
-                    return;
-                }
-
-                // Melee / hitscan: apply now
-                _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Player));
-                int dmg = DamageCalculator.ComputeDamage(Player.Atk, Enemy.Def);
-                Enemy.Hp = System.Math.Max(0, Enemy.Hp - dmg);
-                _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Player, dmg));
-                if (Enemy.IsDead)
-                {
-                    _emit(new CombatEvent(CombatEventType.UnitDied, Side.Enemy));
-                    Player.Xp += Config.XpRewardOnKill;
-                    _emit(new CombatEvent(CombatEventType.XpGained, Side.Player, Config.XpRewardOnKill));
-                }
-            }
-            else // Enemy
-            {
-                _enemyAwaitingImpact = false;
-                _eAwaitTimer = 0f;
-                if (Enemy.IsDead || Enemy.StunTimer > 0f) return;
-                float reach = (EnemyAttack != null ? EnemyAttack.reach : 1.5f);
-                bool inReach = Distance1D() <= reach;
-                if (!inReach) return;
-
-                float projSpeed = (EnemyAttack != null ? EnemyAttack.projectileSpeed : 0f);
-                if (projSpeed > 0f)
-                {
-                    float flight = Distance1D() / System.Math.Max(0.01f, projSpeed);
-                    _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy, (float)flight));
-                    _impacts.Add(new PendingImpact { side = Side.Enemy, time = _now + flight, isProjectileArrival = true });
-                    return;
-                }
-
-                _emit(new CombatEvent(CombatEventType.AttackImpact, Side.Enemy));
-                int dmg = DamageCalculator.ComputeDamage(Enemy.Atk, Player.Def);
-                Player.Hp = System.Math.Max(0, Player.Hp - dmg);
-                _emit(new CombatEvent(CombatEventType.DamageApplied, Side.Enemy, dmg));
-                if (Player.IsDead)
-                {
-                    _emit(new CombatEvent(CombatEventType.UnitDied, Side.Player));
-                }
-            }
-        }
-
-        public void UpdatePlayer(FighterState s) { Player = s; }
-        public void CancelPendingImpact(Side s)
-        {
-            if (s == Side.Player) _playerAwaitingImpact = false;
-            else _enemyAwaitingImpact = false;
-        }
-
-
-        public void RespawnEnemy(FighterState newEnemy)
-        {
-            Enemy = newEnemy;
-            if (Enemy.Hp <= 0) Enemy.Hp = Enemy.MaxHp;
-
-            // reset cadence
-            _enemyAwaitingImpact = false; _eTimer = 0f;
-            _playerAwaitingImpact = false; _pTimer = 0f;
-
-            _emit(new CombatEvent(CombatEventType.Respawned, Side.Enemy));
-        }
-
-        public void RespawnPlayer()
-        {
-            if (Player.Hp <= 0) Player.Hp = Player.MaxHp;
-
-            _playerAwaitingImpact = false; _pTimer = 0f;
-            _enemyAwaitingImpact = false; _eTimer = 0f;
-
-            _emit(new CombatEvent(CombatEventType.Respawned, Side.Player));
+            return remaining;
         }
     }
 }

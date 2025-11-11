@@ -12,13 +12,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ea93c88189e67c043a49119fcfc9e5d8, type: 3}
   m_Name: ArcherAtkProfile
   m_EditorClassIdentifier: 
-  period: 10
-  windup: 0.5
+  period: 2
+  windup: 0.3
   kind: 2
-  reach: 4
+  reach: 12
   projectileSpeed: 5
   aoeRadius: 1
   targetCap: 1
   variance: 0
   critChance: 0
   critMult: 2
+  projectilePrefab: {fileID: 1785984435570276276, guid: 52c900c106f4bec4996a9676389bd176, type: 3}

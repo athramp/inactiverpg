@@ -14,6 +14,7 @@ GameObject:
   - component: {fileID: 5214121087139105583}
   - component: {fileID: 4738074276676035755}
   - component: {fileID: 3385251140731396281}
+  - component: {fileID: 4358435581941371539}
   m_Layer: 0
   m_Name: Goblin
   m_TagString: Untagged
@@ -30,7 +31,7 @@ Transform:
   m_GameObject: {fileID: 3264170349618136456}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 178.13437}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -80,7 +81,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 1583698065
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_Sprite: {fileID: 4723107735738678597, guid: 3ba1ffe4d6459c94faec4910c754e3d3, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -103,7 +104,7 @@ Animator:
   m_GameObject: {fileID: 3264170349618136456}
   m_Enabled: 1
   m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: dbbca98aa1bdf04438642f719301399b, type: 2}
+  m_Controller: {fileID: 22100000, guid: 80a4f459336cef64eb0b1b5dd19e91c2, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -127,8 +128,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76381ca16bd491c48a21ce54d99019ce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  controller: {fileID: 0}
-  isPlayer: 0
+  visuals: {fileID: 0}
+  enableAnimationEvents: 1
 --- !u!50 &4738074276676035755
 Rigidbody2D:
   serializedVersion: 5
@@ -169,6 +170,35 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   def: {fileID: 11400000, guid: 38f427c36c2152e4ba6f0a511d5fb757, type: 2}
+--- !u!114 &4358435581941371539
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3264170349618136456}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff70f0fb346f0a842b472d3a44bf1815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  orchestrator: {fileID: 0}
+  visuals: {fileID: 0}
+  unit:
+    chaseDelayTimer: 0
+    view: {fileID: 0}
+    def: {fileID: 0}
+    posX: 0
+    hp: 0
+    maxHp: 0
+    atk: 0
+    defStat: 0
+    shield: 0
+    stunTimer: 0
+    hpBar: {fileID: 0}
+    enemyId: 0
+  melee: {fileID: 11400000, guid: 1b4157cfdba4568418f29c59f8f15510, type: 2}
+  openerDelay: 0.25
 --- !u!1 &5019150280739445112
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,572 +1,454 @@
 using UnityEngine;
 using Core.Combat;
 using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.UI;
 
 public class CombatOrchestrator : MonoBehaviour
 {
-    // Singleton instance
     private static CombatOrchestrator _instance;
-    public PlayerSpaceCoordinator coordinator;
     public static CombatOrchestrator Instance => _instance;
-public float PlayerLogicalX => _engine?.Player.PosX ?? 0f;
-    public float EnemyLogicalX => _engine?.Enemy.PosX ?? 10f;
-    public int PlayerAtk => _engine?.Player.Atk ?? 0;
-public int EnemyAtk => _engine?.Enemy.Atk ?? 0;
-    [Header("Enemy AI Movement")]
-[SerializeField] private bool  engineMovesEnemy = true;
-[SerializeField] private float desiredGap = 3f;     // units
-[SerializeField] private float enemyApproachSpeed = 3f; // units/sec (your old “Approach Speed”)
+
+    [Header("Refs")]
+    public PlayerSpaceCoordinator coordinator;
+    public BattleVisualController visuals;
+    public GameLoopService gameLoop;
+    public PlayerProgression playerProgression;
+
+    [Header("Player Auto-attack")]
+    [SerializeField] private float playerAttackPeriod = 1.0f;   // seconds
+    [SerializeField] private float playerMeleeReach = 1.6f;
+    
+    [Header("Player Attack Profiles")]
+    [SerializeField] private AttackProfile warriorProfile;
+    [SerializeField] private AttackProfile mageProfile;
+    [SerializeField] private AttackProfile archerProfile;
+    private AttackProfile playerAttackProfile; // assign Warrior/Mage/Archer profile
+
+    [Header("Enemy Movement")]
+    [SerializeField] private float multiEnemyApproachSpeed = 0.6f; // units/sec
+    [SerializeField] private float multiDesiredGap = 1.2f;
+    [SerializeField] private Vector2 chaseDelayRange = new(0.2f, 0.6f);
+    [Header("Player Movement Tracking")]
+    float _lastPlayerX;
+    float _playerSpeed;
+    
+    [SerializeField] float playerRespawnDelay = 1.0f;
+    [SerializeField] float playerRespawnX     = -2.4f;
+    bool _playerRespawning;
+
+    [Header("Debug")]
+    [SerializeField] private bool enableDebug = false;
+
+    // Engine + runtime
+    private CombatEngine _engine;
+    private readonly Dictionary<int, EnemyUnit> _enemyViews = new();
+    public  IReadOnlyDictionary<int, EnemyUnit> EnemyViews => _enemyViews;
+    public  EnemyUnit CurrentTarget { get; private set; }
+    private int _pendingTargetId = -1;
+
+public CombatEngine DebugEngine => _engine;
+public IEnumerable<EnemyUnit> Enemies => _enemyViews.Values;
+
+// Old helper used by SkillGate
+public float EnemyLogicalX() => CurrentTarget != null ? CurrentTarget.posX : (_engine != null ? _engine.EnemyProxyX : 0f);
+
+// Old helper used by EnemySkillRunner
+public bool CanEnemyAct(EnemyUnit u) {
+    if (u == null) return false;
+    return u.hp > 0 && u.stunTimer <= 0f; // expand if you have respawn flags, etc.
+}
+    // cache
+    public int PlayerAtk => gameLoop?.Player?.Atk ?? 0;
+    public float PlayerX  => coordinator ? coordinator.GetLogicalX() : 0f;
+
     void Awake()
     {
-        if (_instance && _instance != this)
-        {
-            Debug.LogWarning($"[CO] Duplicate detected (old={_instance.GetInstanceID()}, new={GetInstanceID()}) — destroying new.");
-            Destroy(gameObject);
-            return;
-        }
+        if (_instance && _instance != this) { Destroy(gameObject); return; }
         _instance = this;
-
     }
+    void OnDestroy() { if (_instance == this) _instance = null; }
 
-    void OnDestroy()
-    {
-        if (_instance == this) _instance = null;
-    }
-
-    // If you use Enter Play Mode Options (domain reload OFF):
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    static void ResetStatic() => _instance = null;
-
-    [Header("References")]
-    public BattleVisualController visuals; // assign in inspector
-    public GameLoopService gameLoop;       // existing owner of Player/Enemy/Class/XpTable
-    public float PlayerX => _engine?.Player.PosX ?? 0f;
-    public float EnemyX  => _engine?.Enemy.PosX  ?? 0f;
-    [Header("Debug Settings")]
-    [SerializeField] private bool enableDebug = true;
-
-    // Fields (assign via inspector)
-    [Header("Attack Profiles")]
-    [SerializeField] private AttackProfile warriorAttackProfile;
-    [SerializeField] private AttackProfile mageAttackProfile;
-    [SerializeField] private AttackProfile archerAttackProfile;
-    [SerializeField] private AttackProfile enemyAttackProfile;
-    [SerializeField] PlayerProgression playerProgression;  // <— add
-    [SerializeField] private PlayerPersistenceService playerPersistenceService;
-    [SerializeField] XpTable xpTable;                      // optional if PlayerProgression has it already
-    private CombatEngine _engine;
-    [SerializeField] private float enemyDeathDelay  = 3f;
-    [SerializeField] private float playerDeathDelay = 3f;
-    private bool _enemyRespawning;
-    private bool _playerRespawning;
-    public CombatEngine DebugEngine => _engine; // used by debug panels
-    // Freeze enemy position after death
-    private float _enemyDeathX = 0f;   // where the dead body should stay
-    public void CO_ApplyDamageToEnemy(int amount) => _engine?.ApplyPureDamageToEnemy(amount);
-    public void CO_ApplyDamageToPlayer(int amount) => _engine?.ApplyPureDamageToPlayer(amount);
-    public void CO_HealPlayer(int amount)         => _engine?.HealPlayer(amount);
-    public void CO_AddShieldToPlayer(int amount)  => _engine?.AddShieldToPlayer(amount);
-    public void CO_StunEnemy(float seconds)       => _engine?.StunEnemy(seconds);
-    public void CO_KnockbackEnemy(float dx) => _engine?.KnockbackEnemy(dx);
-    // projectile ETA broadcast (to keep your existing VFX/event flow consistent)
-
-    // damage/heal/shield (enemy -> player, and enemy self support)
-    public void CO_HealEnemy(int amt)            => _engine?.HealEnemy(amt);
-    public void CO_AddShieldToEnemy(int amt)     => _engine?.AddShieldToEnemy(amt);
-    public void CO_StunPlayer(float seconds) => _engine?.StunPlayer(seconds);
-    Coroutine _enemyMoveCoro;
-
-    public void TweenEnemyBy(float dx, float duration, float startDelay = 0f)
-    {
-        if (_engine == null) return;
-        if (_enemyMoveCoro != null) StopCoroutine(_enemyMoveCoro);
-        _enemyMoveCoro = StartCoroutine(Co_TweenEnemyBy(dx, duration, startDelay));
-    }
-
-    IEnumerator Co_TweenEnemyBy(float dx, float duration, float startDelay)
-    {
-        if (startDelay > 0f) yield return new WaitForSeconds(startDelay);
-
-        float start = _engine.Enemy.PosX;
-        float end   = start + dx;
-        if (duration <= 0f) { _engine.Enemy.PosX = end; yield break; }
-
-        float t = 0f;
-        while (t < 1f)
-        {
-            t += Time.deltaTime / duration;
-            // ease-out (smoothstep)
-            float e = t * t * (3f - 2f * t);
-            _engine.Enemy.PosX = Mathf.Lerp(start, end, e);
-            // if you have a visual sync/tween method, call it here (optional)
-            yield return null;
-        }
-        _engine.Enemy.PosX = end;
-        _enemyMoveCoro = null;
-    }
-    // Enemy: logical shift only (enemy lives under worldRoot)
-    public void KnockbackEnemy(float dx)
-    {
-        if (_engine == null) return;
-        _engine.Enemy.PosX += dx;
-        // no visual synch yet; will be done in Update()
-    }
-
-    // Player: delegate to coordinator so world-shift can occur
-    public void KnockbackPlayer(float dx)
-    {
-        if (_engine == null || coordinator == null) return;
-
-        // Let coordinator move player + shift world if needed
-        coordinator.RequestPlayerDisplacement(dx);
-
-        // Sync engine’s logical pos to coordinator’s truth
-        _engine.Player.PosX = coordinator.GetLogicalX();
-
-        // Optional: ensure sprite matches logical immediately
-        coordinator.SyncVisualToLogical();
-    }      // or engine-side if you have it
     private IEnumerator Start()
     {
-        // coordinator.AnchorPlayerVisuallyToLeft();
-        Debug.Log($"[CO] Started instance id={GetInstanceID()}");
-        // Wait for Firebase + GameLoop ready
-        yield return new WaitUntil(() =>
-    gameLoop != null && gameLoop.IsInitialized && gameLoop.StatsReady && FirebaseGate.IsReady);
-
-        // Apply player class visuals
+        yield return new WaitUntil(() => gameLoop && gameLoop.IsInitialized && gameLoop.StatsReady && FirebaseGate.IsReady);
         visuals.ApplyPlayerClass(gameLoop.Player.ClassId);
-
-        // === Seed engine state from GameLoop data ===
+        playerAttackProfile = SelectProfile(gameLoop.Player.ClassId);
+        // Seed engine
         var p = new FighterState
         {
             Level = gameLoop.Player.Level,
-            Hp = gameLoop.Player.Hp,
+            Hp    = gameLoop.Player.Hp,
             MaxHp = gameLoop.Player.MaxHp,
-            Atk = gameLoop.Player.Atk,
-            Def = gameLoop.Player.Def,
-            Xp = gameLoop.Player.CurrentXp
+            Atk   = gameLoop.Player.Atk,
+            Def   = gameLoop.Player.Def,
+            PosX  = PlayerX
         };
-        Debug.Log($"[CombatOrchestrator] Player stats: Lv {p.Level} HP {p.Hp}/{p.MaxHp} ATK {p.Atk} DEF {p.Def} XP {p.Xp}");
-        var e = new FighterState
+        var cfg = new EngineConfig { PlayerAttackRateSec = playerAttackPeriod, XpRewardOnKill = gameLoop.Enemy.XpReward };
+        _engine = new CombatEngine(p, cfg, HandleEvent);
+        _engine.PlayerPeriodSec = playerAttackProfile ? playerAttackProfile.period : playerAttackPeriod;
+        _engine.PlayerReach = playerAttackProfile ? playerAttackProfile.reach : playerMeleeReach; // fallback
+                _lastPlayerX = _engine.Player.PosX;
+        _playerSpeed = 0f;
+
+
+        // Spawn first enemy from GameLoop
+        var spawnX = visuals.EnemySpawnX;
+        float gap = 1.4f;
+        for (int i = 0; i < 3; i++)
         {
-            Level = gameLoop.Enemy.Level,
-            Hp = gameLoop.Enemy.Hp,
-            MaxHp = gameLoop.Enemy.HpMax,
-            Atk = gameLoop.Enemy.Atk,
-            Def = gameLoop.Enemy.Def
-        };
-        Debug.Log($"[CombatOrchestrator] Enemy stats: Lv {e.Level} HP {e.Hp}/{e.MaxHp} ATK {e.Atk} DEF {e.Def}");
-        var cfg = new EngineConfig
-        {
-            // PlayerAttackRateSec = playerAttackRate,
-            // EnemyAttackRateSec = enemyAttackRate
-        };
-
-        _engine = new CombatEngine(p, e, cfg, HandleEvent);
-        // === Assign attack profiles (from the Inspector or resources) ===
-        _engine.PlayerAttack = GetPlayerAttackProfile();
-        _engine.EnemyAttack = enemyAttackProfile;   // Drag this one in the Inspector
-        float pSpeed = _engine.PlayerAttack?.projectileSpeed ?? 5f;
-        float eSpeed = _engine.EnemyAttack?.projectileSpeed ?? 5f;
-        visuals.SetProjectileSpeeds(pSpeed, eSpeed);
-        // Choose your start X
-        const float START_X = -2.4f;
-
-        // 1) Seed PSC (gameplay truth)
-        coordinator.SetLogicalX(START_X);
-
-        // 2) Push into engine once
-        var p0 = _engine.Player;
-        p0.PosX = coordinator.GetLogicalX();
-        _engine.UpdatePlayer(p0);
-
-        // 3) Place visuals immediately (no 1-frame snap)
-        visuals.SetPlayerX(p0.PosX);
-
-        Debug.Log($"[CO] EnemyAttack projectileSpeed={_engine.EnemyAttack?.projectileSpeed}");
-        Debug.Log($"[CO] enemyIsRanged set to {(_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f}");
-        visuals.SetPlayerRanged((_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f);
-        visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
-        SyncEngineFromGameLoop();
-        // === XP reward from GameLoop ===
-        var xp = gameLoop.Enemy.XpReward;
-        _engine.Config.XpRewardOnKill = xp;
-        // Spawn visuals for the data-selected def (no randomness in BVC)
-
-        visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
-        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-        // Seed engine logical X to match the visual spawn X (so Update won't snap it back)
-        var e0 = _engine.Enemy;
-        e0.PosX = visuals.EnemySpawnX;   // uses the helper you added above
-        _engine.UpdateEnemy(e0);
-
+            gameLoop.RollNextEnemy(out var def, out var isBoss); // NEW: per-spawn roll
+            var pos = new Vector3(spawnX + gap * i, 0f, 0f);
+            SpawnEnemyFromDef(def, isBoss, pos);
+        }
+        Retarget();
         visuals.useEngineDrive = true;
-        // ----- Progression wiring -----
-        var prog = playerProgression;
-        if (prog)
+    }
+
+    void Update()
+    {
+        if (_engine == null) return;
+        float dt = Time.deltaTime;
+
+        // Player logical X from PSC → engine
+        var pl = _engine.Player; pl.PosX = PlayerX; _engine.Player = pl;
+        visuals.SetPlayerX(pl.PosX);
+        // NEW IMPROVEMENT: Player speed tracking for anims
+        // compute horizontal speed (units/sec)
+        float vx = (pl.PosX - _lastPlayerX) / Time.deltaTime;
+        _lastPlayerX = pl.PosX;
+
+        // damp to avoid flicker
+        _playerSpeed = Mathf.Lerp(_playerSpeed, Mathf.Abs(vx), 0.25f);
+
+        // push to animator
+        var pa = visuals.playerAnimator;
+        if (pa) pa.SetFloat("Speed", _playerSpeed);
+
+        // Enemy approach (engine is source of truth for positions)
+        var snapshot = new List<KeyValuePair<int, EnemyUnit>>(_enemyViews);
+        foreach (var kv in snapshot)
         {
-            // Initialize XP bar from progression
-            visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(prog.Level));
+            int eid = kv.Key; var u = kv.Value;
+            if (u == null || u.hp <= 0 || !u.view) continue;
 
-            // Handle level-ups
-            prog.OnLevelUp += newLevel =>
+            if (!_engine.TryGetEnemy(eid, out var fs)) continue;
+
+            // countdown stun & chase delay
+            if (u.stunTimer > 0f) { u.stunTimer -= dt; if (u.stunTimer < 0f) u.stunTimer = 0f; }
+            if (u.chaseDelayTimer > 0f) u.chaseDelayTimer -= dt;
+
+            // move if not stunned/delayed
+            if (u.stunTimer <= 0f && u.chaseDelayTimer <= 0f)
             {
-                Debug.Log($"[Progression] LEVEL UP → {newLevel}");
+                float dir  = Mathf.Sign(PlayerX - fs.PosX); if (dir == 0f) dir = 1f;
+                float stop = PlayerX - dir * multiDesiredGap;
+                fs.PosX = Mathf.MoveTowards(fs.PosX, stop, multiEnemyApproachSpeed * dt);
+            }
 
-                // 1) Recalculate player stats for the new level (and heal to full)
-                gameLoop.Player.ApplyLevelAndRecalculate(newLevel, healToFull: true);
+            _engine.UpdateEnemy(eid, fs);
+            // sync view
+            var lp = u.view.localPosition; lp.x = fs.PosX; u.view.localPosition = lp;
+            u.posX = fs.PosX;
+            float evx = (fs.PosX - u.lastX) / dt;
+            u.lastX = fs.PosX;
+            u.animSpeed = Mathf.Lerp(u.animSpeed, Mathf.Abs(evx), 0.25f);
+            if (u.animator) u.animator.SetFloat("Speed", u.animSpeed);
+            if (u.hp != fs.Hp)
+            {
+                u.hp = fs.Hp;
+                if (u.hpBar) { u.hpBar.maxValue = u.maxHp; u.hpBar.value = u.hp; }
+            }
+            if (!u.deathStarted && fs.Hp <= 0)
+            {
+                u.deathStarted = true;                      // mark once
+                _enemyViews[eid] = u;                       // IMPORTANT if EnemyUnit is a struct
+                StartCoroutine(CoRemoveEnemy(eid, u));
+                continue;
+            }
+        }
 
-                // 2) Refresh UI immediately (HP + XP bar)
-                visuals.SetPlayerHp(gameLoop.Player.Hp, gameLoop.Player.MaxHp);
-                visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(newLevel));
+        // Keep engine proxy range target at current target X (or disable if none)
+        _engine.EnemyProxyX = (CurrentTarget != null) ? CurrentTarget.posX : (_engine.Player.PosX + 9999f);
 
-                // 3) Update the combat engine’s cached player state so combat uses new stats
-                var currentPosX = _engine.Player.PosX;        // <— keep position
-                _engine.UpdatePlayer(new FighterState
-                {
-                    Level = gameLoop.Player.Level,
-                    Hp = gameLoop.Player.Hp,
-                    MaxHp = gameLoop.Player.MaxHp,
-                    Atk = gameLoop.Player.Atk,
-                    Def = gameLoop.Player.Def,
-                    Xp = prog.XpIntoLevel,
-                    PosX = currentPosX
-                });
+        // Engine tick (auto-attack cadence, stuns decay)
+        _engine.Tick(dt);
 
-                // 4) Persist to Firebase                
-                if (playerPersistenceService) _ = playerPersistenceService.SaveProgressAsync();
-            };
+        // Keep target fresh
+        Retarget();
+    }
 
+    // ---------- Spawning / registration ----------
+    public EnemyUnit SpawnEnemyFromDef(MonsterDef def, bool isBoss, Vector3 worldPos)
+    {
+        int hp = isBoss ? Mathf.RoundToInt(def.hp * 3.0f) : def.hp;
+        int atk = isBoss ? Mathf.RoundToInt(def.atk * 1.8f) : def.atk;
+        int df = isBoss ? Mathf.RoundToInt(def.def * 2.0f) : def.def;
 
+        var fs = new FighterState { Level = Mathf.Max(1, gameLoop.Player.Level), Hp = hp, MaxHp = hp, Atk = atk, Def = df, PosX = worldPos.x };
+        int eid = _engine.AddEnemy(fs);
+
+        var mover = visuals.SpawnEnemyView(def, isBoss, worldPos);
+        if (!mover) { _engine.RemoveEnemy(eid); return null; }
+
+        var unit = new EnemyUnit
+        {
+            enemyId = eid,
+            view = mover,
+            def = def,
+            posX = worldPos.x,
+            hp = hp,
+            maxHp = hp,
+            atk = atk,
+            defStat = df,
+            hpBar = mover.GetComponentInChildren<Slider>(true),
+            chaseDelayTimer = Random.Range(chaseDelayRange.x, chaseDelayRange.y)
+        };
+        unit.deathStarted = false;
+        unit.lastX = worldPos.x;
+        unit.animator = mover.GetComponentInChildren<Animator>(true);
+        if (unit.hpBar) { unit.hpBar.maxValue = unit.maxHp; unit.hpBar.value = unit.hp; }
+
+        var esr = mover.GetComponentInChildren<EnemySkillRunner>(true);
+        if (esr) { esr.unit = unit; esr.enabled = true; }
+
+        _enemyViews[eid] = unit;
+        return unit;
+    }
+    private AttackProfile SelectProfile(string classId)
+    {
+        if (string.IsNullOrEmpty(classId)) return warriorProfile;
+        switch (classId.ToLowerInvariant())
+        {
+            case "warrior": return warriorProfile ? warriorProfile : playerAttackProfile;
+            case "mage":    return mageProfile    ? mageProfile    : playerAttackProfile;
+            case "archer":  return archerProfile  ? archerProfile  : playerAttackProfile;
+            default:        return warriorProfile ? warriorProfile : playerAttackProfile;
         }
     }
-
-    public int GetEnemyAtk()
+    private IEnumerator Co_PlayerImpactFromProfile(int lockedEnemyId)
     {
-        return EnemyAtk;
+        var prof = playerAttackProfile;
+        if (prof == null) yield break;
+
+        // windup
+        if (prof.windup > 0f) yield return new WaitForSeconds(prof.windup);
         
-    }
-        
-       
-    // Logical X of this enemy (use whatever store you already have)
-public float GetEnemyLogicalX()
-{
-    // current single-enemy engine
-    return _engine != null ? _engine.Enemy.PosX : visuals.EnemySpawnX;
-}
+        // resolve target
+        EnemyUnit u = null;
+        if (lockedEnemyId != -1) _enemyViews.TryGetValue(lockedEnemyId, out u);
+        if (u == null) u = CurrentTarget;
+        if (u == null || u.view == null) yield break;
 
-public float GetPlayerLogicalX()
-{
-    return coordinator != null ? coordinator.GetLogicalX() : (_engine?.Player.PosX ?? 0f);
-}
+        // reach gate (for melee/hitscan)
+        float px = PlayerX;
+        float dx = Mathf.Abs(u.posX - px);
+        if ((prof.kind == AttackKind.Melee || prof.kind == AttackKind.Hitscan) && dx > prof.reach) yield break;
 
-public bool CanEnemyAct()
-{
-    var f = _engine?.Enemy ?? default;
-    return _engine != null && f.Hp > 0 && f.MaxHp > 0 && f.StunTimer <= 0f && !_enemyRespawning;
-}
-
-public bool CanPlayerAct()
-{
-    if (_engine == null) return false;
-    var f = _engine.Player;
-    if (_playerRespawning) return false;
-    return f.Hp > 0 && f.MaxHp > 0 && f.StunTimer <= 0f;
-}
-
-    private AttackProfile GetPlayerAttackProfile()
-    {
-        // Works for enum, string, or int class ids
-        var idStr = gameLoop.Player.ClassId != null
-            ? gameLoop.Player.ClassId.ToString()
-            : string.Empty;
-
-        // Try friendly names first (enum/string), then common numeric ids as fallback
-        if (string.Equals(idStr, "Warrior", System.StringComparison.OrdinalIgnoreCase) || idStr == "0")
-            return warriorAttackProfile;
-
-        if (string.Equals(idStr, "Mage", System.StringComparison.OrdinalIgnoreCase) || idStr == "1")
-            return mageAttackProfile;
-
-        if (string.Equals(idStr, "Archer", System.StringComparison.OrdinalIgnoreCase) || idStr == "2")
-            return archerAttackProfile;
-
-        // Default fallback
-        return warriorAttackProfile;
-    }
-
-
-    private void SyncEngineFromGameLoop()
-    {
-        if (_engine == null || gameLoop == null) return;
-
-        // Player
-        _engine.UpdatePlayer(new Core.Combat.FighterState
+        // projectile path (spawn trail, wait ETA)
+        if (prof.kind == AttackKind.Projectile)
         {
-            Level = gameLoop.Player.Level,
-            Hp = gameLoop.Player.Hp,
-            MaxHp = gameLoop.Player.MaxHp,
-            Atk = gameLoop.Player.Atk,
-            Def = gameLoop.Player.Def,
-            Xp = gameLoop.Player.CurrentXp
-        });
+            var from = visuals.PlayerMuzzle ? visuals.PlayerMuzzle : visuals.playerRoot; // fallback
+            var to   = u.view;
+            float dist = Mathf.Abs(to.position.x - from.position.x);
+            float eta  = (prof.projectileSpeed > 0.001f) ? dist / prof.projectileSpeed : 0.15f;
 
-        // Enemy
-        _engine.UpdateEnemy(new Core.Combat.FighterState
+            // use prefab from the AttackProfile
+            visuals.SpawnSkillProjectile(from, to, prof.projectilePrefab, eta);
+            yield return new WaitForSeconds(eta);
+        }
+
+        // apply damage
+        ApplyDamageToEnemy(u.enemyId, PlayerAtk);
+
+        // small hit anim on enemy
+        var ea = u.view.GetComponentInChildren<Animator>(true);
+        if (ea) ea.SetTrigger(visuals.Param_HitTrigger);
+    }
+
+
+    // ---------- Targeting ----------
+    public void Retarget() => CurrentTarget = PickNearestAlive();
+    public EnemyUnit PickNearestAlive()
+    {
+        float px = PlayerX; EnemyUnit best = null; float bestD = float.MaxValue;
+        foreach (var u in _enemyViews.Values)
         {
-            Level = gameLoop.Enemy.Level,
-            Hp = gameLoop.Enemy.Hp,
-            MaxHp = gameLoop.Enemy.HpMax,
-            Atk = gameLoop.Enemy.Atk,
-            Def = gameLoop.Enemy.Def
-        });
+            if (u == null || u.hp <= 0) continue;
+            float d = Mathf.Abs(u.posX - px);
+            if (d < bestD) { bestD = d; best = u; }
+        }
+        return best;
     }
-    private void SyncGameLoopFromEngine()
+
+    public float   GetEnemyLogicalX(EnemyUnit u) => u?.posX ?? 0f;
+    public float   GetPlayerLogicalX() => PlayerX;
+    public Transform GetTargetEnemyTransform() => CurrentTarget?.view;
+    public Vector3   GetTargetEnemyWorldPos() => (CurrentTarget?.view != null) ? CurrentTarget.view.position : visuals.GetEnemyWorldPosition();
+
+    // ---------- Damage/CC (engine-centered) ----------
+    public void ApplyDamageToEnemy(int enemyId, int raw)
     {
-        if (_engine == null || gameLoop == null) return;
+        if (!_enemyViews.TryGetValue(enemyId, out var u)) return;
+        int mitigated = Mathf.Max(0, raw - u.defStat);
+        if (u.shield > 0) { var blk = Mathf.Min(u.shield, mitigated); u.shield -= blk; mitigated -= blk; }
+        if (mitigated <= 0) return;
 
-        // Player
-        gameLoop.Player.Level = _engine.Player.Level;
-        gameLoop.Player.Hp    = _engine.Player.Hp;
-        // gameLoop.Player.MaxHp = _engine.Player.MaxHp;
-        gameLoop.Player.Atk   = _engine.Player.Atk;
-        gameLoop.Player.Def   = _engine.Player.Def;
-        // If you store XP on engine, mirror that too:
-        gameLoop.Player.CurrentXp = _engine.Player.Xp;
-
-        // Enemy
-        gameLoop.Enemy.Level = _engine.Enemy.Level;
-        gameLoop.Enemy.Hp    = _engine.Enemy.Hp;
-        // gameLoop.Enemy.HpMax = _engine.Enemy.MaxHp;
-        gameLoop.Enemy.Atk   = _engine.Enemy.Atk;
-        gameLoop.Enemy.Def   = _engine.Enemy.Def;
-
-        // Optional: notify persistence/UI layers
-        // gameLoop.OnCombatSynced?.Invoke();
+        _engine.DealDamageToEnemy(enemyId, mitigated);
+        if (_engine.TryGetEnemy(enemyId, out var fs))
+        {
+            u.hp = fs.Hp;
+            if (u.hpBar) { u.hpBar.maxValue = u.maxHp; u.hpBar.value = u.hp; }
+            if (fs.Hp == 0) StartCoroutine(CoRemoveEnemy(enemyId, u));
+        }
     }
-    void Update()
-{
+    public void ApplyDamageToEnemy(EnemyUnit u, int raw) => ApplyDamageToEnemy(u.enemyId, raw);
 
-        if (_engine == null) return;
-    // if ((Time.frameCount % 20) == 0)
-    // Debug.Log($"[CO] pX={_engine.Player.PosX:F2} eX={_engine.Enemy.PosX:F2}");
-    float dt = Time.deltaTime;
-
-    // 1) Visual -> Engine (player logical from PSC)
-    var p = _engine.Player;
-    p.PosX = coordinator.GetLogicalX();
-    _engine.UpdatePlayer(p);
-
-    // 2) Optional: simple enemy gap AI in logical space (CO only)
-    var e = _engine.Enemy;
-    if (engineMovesEnemy && !_enemyRespawning && CanEnemyAct())
+    public void CO_ApplyDamageToPlayer(int amount)
     {
-        float dir = Mathf.Sign(p.PosX - e.PosX);
-        if (dir == 0f) dir = 1f;  // tie-breaker to avoid NaN
-
-        // target keeps 'desiredGap' away from player
-        float target = p.PosX - dir * desiredGap;
-
-        // clamp movement by approach speed
-        float next = Mathf.MoveTowards(e.PosX, target, enemyApproachSpeed * dt);
-
-        // (optional) arena clamp if you have one:
-        // next = Mathf.Clamp(next, arenaMinX, arenaMaxX);
-
-        e.PosX = next;
+        if (_playerRespawning || _engine == null) return;
+        if (_engine.Player.Hp <= 0) return; // already dead
+        _engine.DealDamageToPlayer(amount);
+        ForceRefreshHpUI_Player();
     }
-    _engine.UpdateEnemy(e);
+    public void ApplyDotToEnemy(int enemyId, int dmgPerTick, float duration, float tickEvery)
+    => _engine?.ApplyDotToEnemy(enemyId, dmgPerTick, duration, tickEvery);
 
-    // 3) Run combat logic (casts, projectiles, timers)
-    _engine.Tick(dt);
+    public void ApplyDotToEnemy(EnemyUnit u, int dmgPerTick, float duration, float tickEvery)
+    { if (u != null) ApplyDotToEnemy(u.enemyId, dmgPerTick, duration, tickEvery); }
 
-    // 4) Engine -> Visuals (single source of placement)
-    visuals.SetPlayerX(_engine.Player.PosX);
-    if (_enemyRespawning)
-        visuals.SetEnemyX(_enemyDeathX);   // keep the corpse where it fell
-    else
-        visuals.SetEnemyX(_engine.Enemy.PosX);
-}
-public void ForceRefreshHpUI_Player()
-{
-        if (_engine == null || visuals == null) return;
-    Debug.Log($"[CO] ForceRefreshHpUI_Player: Hp={_engine.Player.Hp}, MaxHp={_engine.Player.MaxHp}");
-    visuals.SetPlayerHp(_engine.Player.Hp, _engine.Player.MaxHp);
-}
+    public void ApplyDotToPlayer(int dmgPerTick, float duration, float tickEvery)
+        => _engine?.ApplyDotToPlayer(dmgPerTick, duration, tickEvery);
+    public void CO_HealPlayer(int amount)         { _engine?.HealPlayer(amount); }
+    public void CO_AddShieldToPlayer(int amount)  { _engine?.AddShieldToPlayer(amount); }
+    public void CO_StunPlayer(float seconds)      { _engine?.StunPlayer(seconds); }
 
-    private bool IsPlayerRanged() => (_engine.PlayerAttack?.projectileSpeed ?? 0f) > 0f;
-    private bool IsEnemyRanged() => (_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f;
-        public void EmitProjectileETA_FromEnemy(float eta)
-{
-    var ev = new CombatEvent(CombatEventType.AttackImpact, Side.Enemy, eta);
-    HandleEvent(ev); // <-- replace RaiseEvent(...) with this
-}
+    public void CO_StunEnemy(EnemyUnit u, float seconds) { if (u == null || seconds <= 0f) return; u.stunTimer = Mathf.Max(u.stunTimer, seconds); }
+    public void KnockbackEnemy(EnemyUnit u, float dx)
+    {
+        if (u == null) return;
+        if (_engine.TryGetEnemy(u.enemyId, out var fs))
+        {
+            fs.PosX += dx;
+            _engine.UpdateEnemy(u.enemyId, fs);
+            u.posX = fs.PosX;
+            // smooth to avoid flicker
+        }
+    }
+    public void KnockbackPlayer(float dx)
+    {
+        if (coordinator == null) return;
+        coordinator.RequestPlayerDisplacement(dx);
+    }
+
+    // ---------- Engine event sink ----------
     private void HandleEvent(in CombatEvent evt)
     {
-        Debug.Log($"[CO#{GetInstanceID()}] HandleEvent type={evt.Type} actor={evt.Actor}");
-        if (enableDebug)
-           
         switch (evt.Type)
         {
             case CombatEventType.AttackStarted:
                 if (evt.Actor == Side.Player)
                 {
-                        visuals.TriggerPlayerAttack();
+                    _pendingTargetId = (CurrentTarget != null) ? CurrentTarget.enemyId : -1;
+                    visuals.TriggerPlayerAttack();
+                    if (playerAttackProfile)
+                        StartCoroutine(Co_PlayerImpactFromProfile(_pendingTargetId));
                 }
-                else
+                break;
+
+            case CombatEventType.AttackImpact:
+                if (evt.Actor == Side.Player)
                 {
-                    visuals.TriggerEnemyAttack();
+                    if (!playerAttackProfile) // legacy instant hit
+                    {
+                        EnemyUnit tgt = null;
+                        if (_pendingTargetId != -1) _enemyViews.TryGetValue(_pendingTargetId, out tgt);
+                        if (tgt == null) tgt = CurrentTarget;
+                        _pendingTargetId = -1;
+                        if (tgt != null) ApplyDamageToEnemy(tgt.enemyId, PlayerAtk);
+                    }
                 }
                 break;
 
             case CombatEventType.DamageApplied:
-                // Update HP bars & data models
-                SyncGameLoopFromEngine();
-                visuals.SetPlayerHp(gameLoop.Player.Hp, gameLoop.Player.MaxHp);
-                visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-                    break;
-                
-            case CombatEventType.AttackImpact:
-                    {
-                        try
-                        {
-                            Debug.Log($"[CO] AttackImpact routed: {evt.Actor} ETA={evt.ProjectileETA:F2}s (useEngineDrive={visuals.useEngineDrive})");
-                            if (evt.Actor == Side.Player)
-                                visuals.OnPlayerAttackImpactWithETA(evt.ProjectileETA);
-                            else
-                                visuals.OnEnemyAttackImpactWithETA(evt.ProjectileETA);
-                        }
-                        catch (System.Exception ex)
-                        {
-                            Debug.LogError($"[CO] Exception in AttackImpact handling: {ex}");
-                        }
-                        break;
-                    }
-                case CombatEventType.Healed:
-                if (evt.Actor == Side.Player)
-                {
-                    visuals.SetPlayerHp(_engine.Player.Hp, _engine.Player.MaxHp);
-                }
-                else
-                {
-                    visuals.SetEnemyHp(_engine.Enemy.Hp, _engine.Enemy.MaxHp);
-                }
+                if (evt.Actor == Side.Enemy)
+                    visuals.TriggerPlayerHit();
+                    ForceRefreshHpUI_Player();
                 break;
+
             case CombatEventType.UnitDied:
-                    if (evt.Actor == Side.Enemy)
-                    {
-                        if (_enemyRespawning) break;
-                        _enemyRespawning = true;
-                        // Visuals: play death state now
-                        _enemyDeathX = _engine.Enemy.PosX; // freeze position
-                        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-                        visuals.SetEnemyRanged((_engine.EnemyAttack?.projectileSpeed ?? 0f) > 0f);
-                        visuals.OnEnemyDied();
+                if (evt.Actor == Side.Player)
+                    if (!_playerRespawning)
+                    StartCoroutine(Co_PlayerRespawn());
+                break;
 
-                        // Optional: reflect that HP hit zero on the bar while it’s visible
-
-                        // Delay the respawn logic so death anim can play
-                        StartCoroutine(EnemyRespawnRoutine());
-                    }
-                    else // Player died
-                    {
-                        if (_playerRespawning) break;
-                        _playerRespawning = true;
-
-                        // Visuals: play death state now
-                        visuals.OnPlayerDied();
-
-                        // Delay the respawn logic so death anim can play
-                        StartCoroutine(PlayerRespawnRoutine());
-                    }
-                    break;
-
-                case CombatEventType.XpGained:
-                    {
-                        var prog = playerProgression;
-                        if (prog)
-                        {
-                            prog.AddXp(evt.Amount);
-                            visuals.SetXp(prog.XpIntoLevel, gameLoop.XpTable.GetXpToNextLevel(prog.Level));
-                        }
-                        else
-                        {
-                            // Fallback if progression missing (keeps current behavior)
-                            gameLoop.Player.GainXp(evt.Amount);
-                            visuals.SetXp(gameLoop.Player.CurrentXp,
-                                gameLoop.XpTable.GetXpToNextLevel(gameLoop.Player.Level));
-                        }
-
-                        // Persist (cheap; you also autosave)
-                        var ps = playerPersistenceService;
-                        if (ps)
-                        {
-                            // ensure saved values reflect progression (level/xp)
-                            var pprog = prog; // capture
-                            if (pprog != null)
-                            {
-                                gameLoop.Player.Level = pprog.Level;
-                                gameLoop.Player.CurrentXp = pprog.XpIntoLevel; // keep old schema
-                            }
-                            _ = ps.SaveProgressAsync();
-                        }
-                        break;
-                    }
-                }
-                }
-    private System.Collections.IEnumerator EnemyRespawnRoutine()
-    {
-        // Wait death phase
-        yield return new UnityEngine.WaitForSeconds(enemyDeathDelay);
-
-        // Pick next enemy and rebuild engine snapshot (exactly as before)
-        gameLoop.SpawnEnemy(); // choose new def + boss flag; sets gameLoop.Enemy/* and CurrentMonsterDef/IsBoss */
-
-        _engine.Config.XpRewardOnKill = gameLoop.Enemy.XpReward;
-
-        var ne = new FighterState {
-            Level = gameLoop.Enemy.Level,
-            Hp    = gameLoop.Enemy.Hp,
-            // MaxHp = gameLoop.Enemy.HpMax,
-            Atk   = gameLoop.Enemy.Atk,
-            Def   = gameLoop.Enemy.Def
-            // PosX will be fed from visuals in Update() as usual
-        };
-        _engine.RespawnEnemy(ne);
-        SyncGameLoopFromEngine(); // keep GameLoop in sync
-        // Spawn visuals for the newly selected def (keeps stats & visuals in sync)
-        visuals.SpawnEnemyFromDef(gameLoop.CurrentMonsterDef, gameLoop.CurrentIsBoss);
-        visuals.SetEnemyHp(gameLoop.Enemy.Hp, gameLoop.Enemy.HpMax);
-        // Keep engine and visuals aligned on the same starting X
-        var e2 = _engine.Enemy;
-        e2.PosX = visuals.EnemySpawnX;
-        _engine.UpdateEnemy(e2);
-
-        _enemyRespawning = false;
-        _enemyDeathX = 0f;
+            case CombatEventType.XpGained:
+                visuals.SetXp(gameLoop.Player.CurrentXp, gameLoop.XpTable.GetXpToNextLevel(gameLoop.Player.Level));
+                break;
+        }
     }
-
-    private System.Collections.IEnumerator PlayerRespawnRoutine()
+    IEnumerator Co_PlayerRespawn()
     {
-        yield return new UnityEngine.WaitForSeconds(playerDeathDelay);
+        if (_playerRespawning) yield break;
+        _playerRespawning = true;
 
-        // Reset player HP and engine snapshot (your previous logic)
-        gameLoop.Player.Hp = gameLoop.Player.MaxHp;
+        // stop further deaths during delay
+        var p = _engine.Player;
+        p.Hp = 0;                 // mark dead once
+        _engine.Player = p;
 
-        // If you manually touched _engine.Player.Hp before, that’s no longer needed here,
-        // RespawnPlayer() will ensure the engine-side snapshot is alive:
-        _engine.RespawnPlayer();
-        SyncGameLoopFromEngine();
-        visuals.OnPlayerRespawned();
+        visuals.OnPlayerDied();   // sets Dead = true
+
+        yield return new WaitForSeconds(playerRespawnDelay);
+
+        // revive + reset
+        p = _engine.Player;
+        p.Hp = p.MaxHp;
+        p.StunTimer = 0f;
+        p.PosX = playerRespawnX;
+        _engine.Player = p;
+
+        coordinator.SetLogicalX(playerRespawnX);
+        visuals.OnPlayerRespawn();  // sets Dead=false and clears triggers
+        visuals.SetPlayerX(playerRespawnX);
+        ForceRefreshHpUI_Player();
 
         _playerRespawning = false;
     }
-    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
-private void AssertEngineIsAuthoritative()
-{
-    // Example heuristic: engine values must match gameLoop right after a sync-tick
-    if (gameLoop.Player.Hp != _engine.Player.Hp || gameLoop.Enemy.Hp != _engine.Enemy.Hp)
-        Debug.LogWarning("[CO] Detected desync between engine and game loop — check for direct writes.");
-}
+
+    // ---------- Cleanup ----------
+    private IEnumerator CoRemoveEnemy(int enemyId, EnemyUnit u)
+    {
+        // death anim
+        var anim = u.view ? u.view.GetComponentInChildren<Animator>(true) : null;
+        if (anim) anim.SetBool(visuals.Param_DeadBool, true);
+
+        // XP: grant via PlayerProgression (authoritative UI source)
+        int xp = u.def ? u.def.xpReward : 0;
+        if (xp > 0)
+        {
+            var prog = playerProgression;
+            if (prog) prog.AddXp(xp);
+
+            // Optional: keep GameLoop’s snapshot in sync if you show it elsewhere
+            if (gameLoop && gameLoop.Player != null)
+                gameLoop.Player.CurrentXp = prog ? prog.XpIntoLevel : (gameLoop.Player.CurrentXp + xp);
+
+            // Optional UI hook (if you use it)
+            visuals.SetXp(prog ? prog.XpIntoLevel : 0, gameLoop.XpTable.GetXpToNextLevel(prog ? prog.Level : gameLoop.Player.Level));
+        }
+
+        yield return new WaitForSeconds(0.6f);
+
+        _engine.RemoveEnemy(enemyId);
+        _enemyViews.Remove(enemyId);
+        if (u.view) Destroy(u.view.gameObject);
+        Retarget();
+    }
+
+    // ---------- UI ----------
+    public void ForceRefreshHpUI_Player()
+    {
+        // if you have a UI widget, update here; left blank intentionally
+    }
 }

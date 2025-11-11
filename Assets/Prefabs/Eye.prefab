@@ -123,6 +123,7 @@ GameObject:
   - component: {fileID: 5595588679007028410}
   - component: {fileID: 8243556597763229595}
   - component: {fileID: -8097075679201244255}
+  - component: {fileID: -2886844502248502639}
   m_Layer: 0
   m_Name: Eye
   m_TagString: Untagged
@@ -189,7 +190,7 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 1583698065
-  m_SortingLayer: 1
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_Sprite: {fileID: 6991849013916550155, guid: b10d67c90146ed141865234867af6cf1, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -212,7 +213,7 @@ Animator:
   m_GameObject: {fileID: 8539923866264311644}
   m_Enabled: 1
   m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: bd1a398ce13793046a68e09d67d97d36, type: 2}
+  m_Controller: {fileID: 22100000, guid: fbb94a972b5c01e4e8e96e75ee0be12f, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -236,8 +237,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 76381ca16bd491c48a21ce54d99019ce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  controller: {fileID: 0}
-  isPlayer: 0
+  visuals: {fileID: 0}
+  enableAnimationEvents: 1
 --- !u!50 &8243556597763229595
 Rigidbody2D:
   serializedVersion: 5
@@ -278,3 +279,32 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   def: {fileID: 11400000, guid: 5a042fd68cb3e474aa6af0a16989ef87, type: 2}
+--- !u!114 &-2886844502248502639
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8539923866264311644}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff70f0fb346f0a842b472d3a44bf1815, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  orchestrator: {fileID: 0}
+  visuals: {fileID: 0}
+  unit:
+    chaseDelayTimer: 0
+    view: {fileID: 0}
+    def: {fileID: 0}
+    posX: 0
+    hp: 0
+    maxHp: 0
+    atk: 0
+    defStat: 0
+    shield: 0
+    stunTimer: 0
+    hpBar: {fileID: 0}
+    enemyId: 0
+  melee: {fileID: 11400000, guid: 1b4157cfdba4568418f29c59f8f15510, type: 2}
+  openerDelay: 0.25

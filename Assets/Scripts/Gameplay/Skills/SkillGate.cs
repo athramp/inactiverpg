@@ -4,8 +4,10 @@ public class SkillGate : MonoBehaviour
 {
     public PlayerSpaceCoordinator coordinator;
 
-    float SelfX => coordinator.LogicalX;
-    float EnemyX => CombatOrchestrator.Instance ? CombatOrchestrator.Instance.EnemyLogicalX : (SelfX + 5f);
+    float SelfX  => coordinator.LogicalX; // keep as-is for your PSC
+    float EnemyX => CombatOrchestrator.Instance
+        ? CombatOrchestrator.Instance.EnemyLogicalX()   // <-- invoke the shim method
+        : (SelfX + 5f);
 
     public bool CanUse(SkillProfile s)
     {

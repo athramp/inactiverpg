@@ -12,7 +12,7 @@ public static class AutoDestroy
 
     private class AutoDestroyRunner : MonoBehaviour
     {
-        public float fallbackSeconds = 0.3f;
+        public float fallbackSeconds = 1.3f;
 
         private ParticleSystem[] _ps;
         private bool _useFallbackTimer;

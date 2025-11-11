@@ -213,7 +213,7 @@ Animator:
   m_GameObject: {fileID: 7165065568128235175}
   m_Enabled: 1
   m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 41c0ee47e7faa3a4791c5dcd0d0d59b2, type: 2}
+  m_Controller: {fileID: 22100000, guid: cfd69e378b3f9724e83cb9c2697aea97, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -292,13 +292,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   orchestrator: {fileID: 0}
-  skills:
-  - {fileID: 11400000, guid: 18fef7418fb5fa74a8277ca0492a4455, type: 2}
-  randomOrder: 1
-  cooldownRange: {x: 2, y: 3}
-  openerDelay: 0.25
-  gateByRange: 0
-  extraRangeBuffer: 0
-  defaultDisplacementDuration: 0.15
-  randomStaggerRange: {x: 0, y: 0.05}
   visuals: {fileID: 0}
+  unit:
+    chaseDelayTimer: 0
+    view: {fileID: 0}
+    def: {fileID: 0}
+    posX: 0
+    hp: 0
+    maxHp: 0
+    atk: 0
+    defStat: 0
+    shield: 0
+    stunTimer: 0
+    hpBar: {fileID: 0}
+    enemyId: 0
+  melee: {fileID: 11400000, guid: 1b4157cfdba4568418f29c59f8f15510, type: 2}
+  openerDelay: 0.25
