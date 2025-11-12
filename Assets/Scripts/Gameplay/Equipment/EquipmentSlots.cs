@@ -32,6 +32,12 @@ namespace Gameplay.Equipment
                     yield return entry.equipped;
         }
 
+        public IEnumerable<(GearSlot slot, GearInstance gear)> EnumerateSlots()
+        {
+            foreach (var entry in slots)
+                yield return (entry.slot, entry.equipped);
+        }
+
         public bool Equip(GearInstance inst)
         {
             if (inst?.item == null) return false;
@@ -63,6 +69,25 @@ namespace Gameplay.Equipment
                 total += gear.GetSubstatValue(type);
             }
             return total;
+        }
+
+        public void ApplyLoadout(Dictionary<GearSlot, GearInstance> mapping)
+        {
+            bool changed = false;
+            foreach (var entry in slots)
+            {
+                if (mapping != null && mapping.TryGetValue(entry.slot, out var inst))
+                {
+                    entry.equipped = inst;
+                    changed = true;
+                }
+                else if (entry.equipped != null)
+                {
+                    entry.equipped = null;
+                    changed = true;
+                }
+            }
+            if (changed) OnEquipmentChanged?.Invoke();
         }
     }
 }

@@ -32,6 +32,20 @@ namespace Gameplay.Equipment
             return inst;
         }
 
+        public static GearInstance Restore(string instanceId, GearItem item, GearRarity rarity, int itemLevel, IEnumerable<GearSubstatRoll> savedSubstats)
+        {
+            var inst = new GearInstance
+            {
+                instanceId = string.IsNullOrEmpty(instanceId) ? Guid.NewGuid().ToString("N") : instanceId,
+                item = item,
+                rarity = rarity,
+                level = Mathf.Max(1, itemLevel),
+                evaluatedStats = item ? item.EvaluateStats(itemLevel, rarity) : default,
+                substats = savedSubstats != null ? new List<GearSubstatRoll>(savedSubstats) : new List<GearSubstatRoll>()
+            };
+            return inst;
+        }
+
         public float GetSubstatValue(GearSubstatType type)
         {
             float total = 0f;

@@ -67,7 +67,12 @@ public bool CanEnemyAct(EnemyUnit u) {
         if (_instance && _instance != this) { Destroy(gameObject); return; }
         _instance = this;
     }
-    void OnDestroy() { if (_instance == this) _instance = null; }
+    void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+        if (gameLoop?.Player != null)
+            gameLoop.Player.OnStatsChanged -= HandlePlayerStatsChanged;
+    }
 
     private IEnumerator Start()
     {
@@ -109,6 +114,12 @@ public bool CanEnemyAct(EnemyUnit u) {
         }
         Retarget();
         visuals.useEngineDrive = true;
+
+        if (gameLoop?.Player != null)
+        {
+            gameLoop.Player.OnStatsChanged += HandlePlayerStatsChanged;
+            HandlePlayerStatsChanged();
+        }
     }
 
     void Update()
@@ -449,5 +460,17 @@ public bool CanEnemyAct(EnemyUnit u) {
     public void ForceRefreshHpUI_Player()
     {
         // if you have a UI widget, update here; left blank intentionally
+    }
+
+    private void HandlePlayerStatsChanged()
+    {
+        if (_engine == null || gameLoop?.Player == null) return;
+        var ps = gameLoop.Player;
+        var enginePlayer = _engine.Player;
+        enginePlayer.MaxHp = ps.MaxHp;
+        enginePlayer.Hp = Mathf.Min(enginePlayer.Hp, enginePlayer.MaxHp);
+        enginePlayer.Atk = ps.Atk;
+        enginePlayer.Def = ps.Def;
+        _engine.Player = enginePlayer;
     }
 }

@@ -11,6 +11,7 @@ namespace Gameplay.Loot
         [SerializeField] private LootTable lootTable;
         [SerializeField] private SubstatCatalog substatCatalog;
         [SerializeField] private CurrencyService currency;
+        public LootTable LootTableAsset => lootTable;
 
         [Header("Runtime")]
         [SerializeField] private int lampLevel = 1;

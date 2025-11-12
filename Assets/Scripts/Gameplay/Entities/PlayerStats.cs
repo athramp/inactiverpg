@@ -24,6 +24,7 @@ public class PlayerStats
     private EquipmentSlots equipmentSlots;
     private GearStatBlock equipmentBonus;
     public GearStatBlock EquipmentBonus => equipmentBonus;
+    public event System.Action OnStatsChanged;
     private readonly Dictionary<GearSubstatType, float> substatTotals = new();
     public void ApplyProgress(string classId, int level, int xp, int hp)
 {
@@ -69,6 +70,7 @@ public System.Collections.Generic.Dictionary<string, object> ToFirestoreProgress
             Atk += equipmentBonus.attack;
             Def += equipmentBonus.defense;
         }
+        OnStatsChanged?.Invoke();
     }
     public void ApplyLevelAndRecalculate(int newLevel, bool healToFull = true)
 {

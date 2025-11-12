@@ -19,6 +19,19 @@ namespace Gameplay.Loot
             return pool.items[idx];
         }
 
+        public GearItem FindItem(string name)
+        {
+            if (string.IsNullOrEmpty(name) || pools == null) return null;
+            foreach (var pool in pools)
+            {
+                if (pool?.items == null) continue;
+                foreach (var item in pool.items)
+                    if (item && item.name == name)
+                        return item;
+            }
+            return null;
+        }
+
         [System.Serializable]
         private class RarityPool
         {

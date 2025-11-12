@@ -1,3 +1,4 @@
+using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -41,7 +42,7 @@ public class EquipmentSlotView : MonoBehaviour
     private string BuildStatsPreview(GearInstance inst)
     {
         if (inst == null) return "";
-        System.Text.StringBuilder sb = new();
+        StringBuilder sb = new();
         var stats = inst.TotalStats;
         if (stats.attack != 0) sb.AppendLine($"+{stats.attack} ATK");
         if (stats.defense != 0) sb.AppendLine($"+{stats.defense} DEF");

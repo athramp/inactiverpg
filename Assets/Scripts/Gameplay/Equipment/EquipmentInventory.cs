@@ -33,5 +33,17 @@ namespace Gameplay.Equipment
         }
 
         public GearInstance Find(string instanceId) => items.Find(i => i.instanceId == instanceId);
+
+        public void ReplaceAll(IEnumerable<GearInstance> newItems)
+        {
+            items.Clear();
+            if (newItems == null) return;
+            foreach (var inst in newItems)
+            {
+                if (inst == null) continue;
+                items.Add(inst);
+                OnItemAdded?.Invoke(inst);
+            }
+        }
     }
 }

@@ -9,6 +9,7 @@ namespace Gameplay.Loot
         [SerializeField] private EquipmentInventory inventory;
         [SerializeField] private EquipmentSlots equipmentSlots;
         [SerializeField] private GameLoopService gameLoop;
+        [SerializeField] private PlayerPersistenceService persistence;
 
         private void Awake()
         {
@@ -16,6 +17,7 @@ namespace Gameplay.Loot
             if (!inventory) inventory = FindObjectOfType<EquipmentInventory>();
             if (!equipmentSlots) equipmentSlots = FindObjectOfType<EquipmentSlots>();
             if (!gameLoop) gameLoop = FindObjectOfType<GameLoopService>();
+            if (!persistence) persistence = FindObjectOfType<PlayerPersistenceService>();
         }
 
         public bool RollAndStore()
@@ -27,6 +29,7 @@ namespace Gameplay.Loot
             if (inst == null) return false;
             inventory.Add(inst);
             AutoEquip(inst);
+            if (persistence) _ = persistence.SaveProgressAsync();
             return true;
         }
 
