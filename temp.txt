@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using Gameplay.Equipment;
 
 public class CampPanel : MonoBehaviour
 {
@@ -19,10 +18,9 @@ public class CampPanel : MonoBehaviour
     [SerializeField] TMP_Text LevelText;
     [SerializeField] TMP_Text HPText;
     [SerializeField] TMP_Text StatsText;
-    [SerializeField] TMP_Text GearStatsText;
 
     [Header("Sources")]
-    [SerializeField] CombatOrchestrator orchestrator;
+    [SerializeField] CombatOrchestrator orchestrator; // assign in Inspector
 
     void Awake()
     {
@@ -31,7 +29,9 @@ public class CampPanel : MonoBehaviour
 
     void OnEnable()
     {
+        // try to show immediate info from GameLoop (no waiting on network)
         PrimeHeaderFromGameLoop();
+        // keep the panel live, like CombatDebugPanel
         InvokeRepeating(nameof(UpdateRuntimeStats), 0.2f, 0.2f);
     }
 
@@ -45,12 +45,14 @@ public class CampPanel : MonoBehaviour
         var loop = orchestrator ? orchestrator.gameLoop : null;
         if (loop == null) return;
 
+        // Name (if you store one in GameLoop; else leave blank or “Hero”)
         if (NameText)
         {
             var displayName = string.IsNullOrEmpty(loop.PlayerDisplayName) ? "Hero" : loop.PlayerDisplayName;
             NameText.text = displayName;
         }
 
+        // Class sprite from current player class
         if (ClassImage && loop.Player != null)
             ClassImage.sprite = SpriteForClass(loop.Player.ClassId);
     }
@@ -64,30 +66,19 @@ public class CampPanel : MonoBehaviour
         var prog = FindObjectOfType<PlayerProgression>();
 
         if (loop?.Player == null) return;
-
         if (NameText)
-        {
-            var n = string.IsNullOrEmpty(loop.PlayerDisplayName) ? "Hero" : loop.PlayerDisplayName;
-            if (NameText.text != n) NameText.text = n;
-        }
-
+    {
+        var n = string.IsNullOrEmpty(loop.PlayerDisplayName) ? "Hero" : loop.PlayerDisplayName;
+        if (NameText.text != n) NameText.text = n;
+    }
+        // Show level from PROGRESSION if available, otherwise from GameLoop
         int level = prog != null ? prog.Level : loop.Player.Level;
         if (LevelText) LevelText.text = $"Lv {level}";
 
+        // Live HP/ATK/DEF from GameLoopService (authoritative runtime stats)
         var ps = loop.Player;
-        if (eng != null && HPText)   HPText.text   = $"HP {eng.Player.Hp}/{eng.Player.MaxHp}";
+        if (HPText)   HPText.text   = $"HP {eng.Player.Hp}/{eng.Player.MaxHp}";
         if (StatsText) StatsText.text = $"ATK {ps.Atk}  •  DEF {ps.Def}";
-        if (GearStatsText)
-        {
-            var gear = ps.EquipmentBonus;
-            GearStatsText.text =
-                $"Gear Bonus\n" +
-                $"ATK +{gear.attack}\n" +
-                $"DEF +{gear.defense}\n" +
-                $"HP +{gear.maxHp}\n" +
-                $"Crit {ps.GetSubstat(GearSubstatType.CritRate):0.##}%  " +
-                $"Evasion {ps.GetSubstat(GearSubstatType.Evasion):0.##}%";
-        }
     }
 
     Sprite SpriteForClass(string cls)

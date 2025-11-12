@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using Gameplay.Equipment;
 
 public class PlayerStats
 {
@@ -19,6 +21,10 @@ public class PlayerStats
     [SerializeField] private int defPerLevel = 1;
     private ClassCatalog catalog;
     private XpTable xpTable;
+    private EquipmentSlots equipmentSlots;
+    private GearStatBlock equipmentBonus;
+    public GearStatBlock EquipmentBonus => equipmentBonus;
+    private readonly Dictionary<GearSubstatType, float> substatTotals = new();
     public void ApplyProgress(string classId, int level, int xp, int hp)
 {
     if (!string.IsNullOrEmpty(classId)) ClassId = classId;
@@ -56,6 +62,13 @@ public System.Collections.Generic.Dictionary<string, object> ToFirestoreProgress
         MaxHp = Mathf.RoundToInt(c.BaseHP + c.HpGrowth * (Level - 1));
         Atk = Mathf.RoundToInt(c.BaseATK + c.AtkGrowth * (Level - 1));
         Def = Mathf.RoundToInt(c.BaseDEF + c.DefGrowth * (Level - 1));
+
+        if (!equipmentBonus.IsZero())
+        {
+            MaxHp += equipmentBonus.maxHp;
+            Atk += equipmentBonus.attack;
+            Def += equipmentBonus.defense;
+        }
     }
     public void ApplyLevelAndRecalculate(int newLevel, bool healToFull = true)
 {
@@ -86,5 +99,47 @@ public System.Collections.Generic.Dictionary<string, object> ToFirestoreProgress
             RecalculateStats();
             Debug.Log($"Level Up! → {Level}");
         }
+    }
+
+    public void AttachEquipment(EquipmentSlots slots)
+    {
+        if (equipmentSlots == slots) return;
+        if (equipmentSlots != null) equipmentSlots.OnEquipmentChanged -= HandleEquipmentChanged;
+        equipmentSlots = slots;
+        if (equipmentSlots != null) equipmentSlots.OnEquipmentChanged += HandleEquipmentChanged;
+        RecalculateEquipmentBonus();
+    }
+
+    private void HandleEquipmentChanged() => RecalculateEquipmentBonus();
+
+    private void RecalculateEquipmentBonus()
+    {
+        equipmentBonus = default;
+        substatTotals.Clear();
+        if (equipmentSlots != null)
+        {
+            foreach (var gear in equipmentSlots.AllEquipped())
+            {
+                if (gear == null) continue;
+                equipmentBonus += gear.TotalStats;
+                if (gear.Substats != null)
+                {
+                    foreach (var roll in gear.Substats)
+                    {
+                        if (substatTotals.ContainsKey(roll.type))
+                            substatTotals[roll.type] += roll.value;
+                        else
+                            substatTotals[roll.type] = roll.value;
+                    }
+                }
+            }
+        }
+        RecalculateStats();
+        Hp = Mathf.Min(Hp, MaxHp);
+    }
+
+    public float GetSubstat(GearSubstatType type)
+    {
+        return substatTotals.TryGetValue(type, out var value) ? value : 0f;
     }
 }

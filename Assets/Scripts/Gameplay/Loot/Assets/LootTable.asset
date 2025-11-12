@@ -1,0 +1,31 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 63ee9e4482f928c4d8e903f6eb4a5bdc, type: 3}
+  m_Name: LootTable
+  m_EditorClassIdentifier: 
+  pools:
+  - rarity: 0
+    items:
+    - {fileID: 11400000, guid: 75700289243ef9a43a9abac0e88234d1, type: 2}
+    - {fileID: 11400000, guid: 97a416105971fdc4ea4fb2ea3c419371, type: 2}
+    - {fileID: 11400000, guid: f76db92af1b09d54a9c361ff9b80a550, type: 2}
+    - {fileID: 11400000, guid: 6b63d0d04bfef1d4584cbdedb0021b7e, type: 2}
+    - {fileID: 11400000, guid: 2e65eae3ed1a03f40b8480c44d502db4, type: 2}
+    - {fileID: 11400000, guid: 93ff7247fa1969344a88ae808dce5d5c, type: 2}
+  - rarity: 1
+    items:
+    - {fileID: 11400000, guid: 75700289243ef9a43a9abac0e88234d1, type: 2}
+    - {fileID: 11400000, guid: 97a416105971fdc4ea4fb2ea3c419371, type: 2}
+    - {fileID: 11400000, guid: f76db92af1b09d54a9c361ff9b80a550, type: 2}
+    - {fileID: 11400000, guid: 6b63d0d04bfef1d4584cbdedb0021b7e, type: 2}
+    - {fileID: 11400000, guid: 2e65eae3ed1a03f40b8480c44d502db4, type: 2}
+    - {fileID: 11400000, guid: 93ff7247fa1969344a88ae808dce5d5c, type: 2}

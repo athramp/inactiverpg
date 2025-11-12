@@ -1,0 +1,32 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f37b478879c1a1345b9e61b2dc64d639, type: 3}
+  m_Name: Substat Catalog
+  m_EditorClassIdentifier: 
+  rarityBudgets:
+  - rarity: 0
+    substatCount: 1
+  - rarity: 1
+    substatCount: 2
+  substats:
+  - type: 0
+    allowDuplicates: 0
+    rarityRanges:
+    - rarity: 0
+      valuePercentRange: {x: 1, y: 2}
+      weight: 50
+  - type: 2
+    allowDuplicates: 0
+    rarityRanges:
+    - rarity: 0
+      valuePercentRange: {x: 1, y: 2}
+      weight: 50

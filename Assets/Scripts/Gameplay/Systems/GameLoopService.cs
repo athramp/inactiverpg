@@ -1,5 +1,6 @@
 // Assets/Scripts/Systems/GameLoopService.cs
 using UnityEngine;
+using Gameplay.Equipment;
 
 public class GameLoopService : MonoBehaviour
 {
@@ -21,6 +22,9 @@ public class GameLoopService : MonoBehaviour
         PlayerDisplayName = string.IsNullOrWhiteSpace(name) ? "Hero" : name;
 
     public PlayerStats Player { get; private set; }
+
+    [Header("Player Equipment")]
+    [SerializeField] private Gameplay.Equipment.EquipmentSlots equipmentSlots;
 
     // Legacy single-enemy snapshot (still used by some UI/scripts)
     // Safe to keep; Orchestrator no longer reads from here for combat.
@@ -66,6 +70,8 @@ public class GameLoopService : MonoBehaviour
         }
 
         Player = new PlayerStats(classCatalog, xpTable, classId);
+        if (!equipmentSlots) equipmentSlots = FindObjectOfType<Gameplay.Equipment.EquipmentSlots>();
+        Player.AttachEquipment(equipmentSlots);
         // Seed one enemy definition for initial UI; Orchestrator will actually spawn visuals.
         RollNextEnemy(out var def, out var isBoss);
         BuildLegacyEnemySnapshot(def, isBoss);
