@@ -3,6 +3,7 @@ using Core.Combat;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.UI;
+using Gameplay.Systems;
 
 public class CombatOrchestrator : MonoBehaviour
 {
@@ -14,6 +15,9 @@ public class CombatOrchestrator : MonoBehaviour
     public BattleVisualController visuals;
     public GameLoopService gameLoop;
     public PlayerProgression playerProgression;
+    [Header("Enemy UI")]
+    [SerializeField] private Slider enemyHpBarPrefab;
+    [SerializeField] private float enemyHpBarScale = 0.1f;
 
     [Header("Player Auto-attack")]
     [SerializeField] private float playerAttackPeriod = 1.0f;   // seconds
@@ -42,6 +46,7 @@ public class CombatOrchestrator : MonoBehaviour
 
     // Engine + runtime
     private CombatEngine _engine;
+    public PlayerCombatStats CombatStats { get; private set; }
     private readonly Dictionary<int, EnemyUnit> _enemyViews = new();
     public  IReadOnlyDictionary<int, EnemyUnit> EnemyViews => _enemyViews;
     public  EnemyUnit CurrentTarget { get; private set; }
@@ -97,10 +102,10 @@ public bool CanEnemyAct(EnemyUnit u) {
         };
         var cfg = new EngineConfig { PlayerAttackRateSec = playerAttackPeriod, XpRewardOnKill = gameLoop.Enemy.XpReward };
         _engine = new CombatEngine(p, cfg, HandleEvent);
-        _engine.PlayerPeriodSec = playerAttackProfile ? playerAttackProfile.period : playerAttackPeriod;
         _engine.PlayerReach = playerAttackProfile ? playerAttackProfile.reach : playerMeleeReach; // fallback
-                _lastPlayerX = _engine.Player.PosX;
+        _lastPlayerX = _engine.Player.PosX;
         _playerSpeed = 0f;
+        UpdatePlayerCadence();
 
 
         // Spawn first enemy from GameLoop
@@ -174,7 +179,11 @@ public bool CanEnemyAct(EnemyUnit u) {
             if (u.hp != fs.Hp)
             {
                 u.hp = fs.Hp;
-                if (u.hpBar) { u.hpBar.maxValue = u.maxHp; u.hpBar.value = u.hp; }
+                if (u.hpBar)
+                {
+                    float normalized = (u.maxHp > 0) ? Mathf.Clamp01((float)u.hp / u.maxHp) : 0f;
+                    u.hpBar.value = normalized;
+                }
             }
             if (!u.deathStarted && fs.Hp <= 0)
             {
@@ -218,19 +227,35 @@ public bool CanEnemyAct(EnemyUnit u) {
             maxHp = hp,
             atk = atk,
             defStat = df,
-            hpBar = mover.GetComponentInChildren<Slider>(true),
+            hpBar = SpawnEnemyHpBar(mover),
             chaseDelayTimer = Random.Range(chaseDelayRange.x, chaseDelayRange.y)
         };
         unit.deathStarted = false;
         unit.lastX = worldPos.x;
         unit.animator = mover.GetComponentInChildren<Animator>(true);
-        if (unit.hpBar) { unit.hpBar.maxValue = unit.maxHp; unit.hpBar.value = unit.hp; }
+        if (unit.hpBar)
+        {
+            unit.hpBar.minValue = 0f;
+            unit.hpBar.maxValue = 1f;
+            unit.hpBar.value = 1f;
+        }
 
         var esr = mover.GetComponentInChildren<EnemySkillRunner>(true);
         if (esr) { esr.unit = unit; esr.enabled = true; }
 
         _enemyViews[eid] = unit;
         return unit;
+    }
+
+    private Slider SpawnEnemyHpBar(Transform parent)
+    {
+        if (!enemyHpBarPrefab || !parent) return null;
+        var bar = Instantiate(enemyHpBarPrefab, parent);
+        var rect = bar.transform as RectTransform;
+        rect.localScale = Vector3.one * Mathf.Max(0.0001f, enemyHpBarScale);
+        rect.localPosition = new Vector3(0f, 0.2f, 0f);
+        bar.gameObject.SetActive(true);
+        return bar;
     }
     private AttackProfile SelectProfile(string classId)
     {
@@ -460,6 +485,20 @@ public bool CanEnemyAct(EnemyUnit u) {
     public void ForceRefreshHpUI_Player()
     {
         // if you have a UI widget, update here; left blank intentionally
+    }
+
+    public void ApplyCombatStats(PlayerCombatStats stats)
+    {
+        CombatStats = stats;
+        UpdatePlayerCadence();
+    }
+
+    private void UpdatePlayerCadence()
+    {
+        if (_engine == null) return;
+        float basePeriod = playerAttackProfile ? playerAttackProfile.period : playerAttackPeriod;
+        float multiplier = Mathf.Max(0.1f, 1f + CombatStats.attackSpeedAA);
+        _engine.PlayerPeriodSec = basePeriod / multiplier;
     }
 
     private void HandlePlayerStatsChanged()

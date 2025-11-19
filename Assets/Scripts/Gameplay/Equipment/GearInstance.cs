@@ -26,13 +26,14 @@ namespace Gameplay.Equipment
                 item = item,
                 rarity = rarity,
                 level = Mathf.Max(1, itemLevel),
-                evaluatedStats = item ? item.EvaluateStats(itemLevel, rarity) : default
+                evaluatedStats = GearStatCalculator.RollStats(item, rarity, itemLevel)
             };
             inst.RollSubstats(substatCatalog);
             return inst;
         }
 
-        public static GearInstance Restore(string instanceId, GearItem item, GearRarity rarity, int itemLevel, IEnumerable<GearSubstatRoll> savedSubstats)
+        public static GearInstance Restore(string instanceId, GearItem item, GearRarity rarity, int itemLevel,
+            IEnumerable<GearSubstatRoll> savedSubstats, GearStatBlock? savedStats = null)
         {
             var inst = new GearInstance
             {
@@ -40,7 +41,7 @@ namespace Gameplay.Equipment
                 item = item,
                 rarity = rarity,
                 level = Mathf.Max(1, itemLevel),
-                evaluatedStats = item ? item.EvaluateStats(itemLevel, rarity) : default,
+                evaluatedStats = savedStats ?? GearStatCalculator.RollStats(item, rarity, itemLevel),
                 substats = savedSubstats != null ? new List<GearSubstatRoll>(savedSubstats) : new List<GearSubstatRoll>()
             };
             return inst;

@@ -85,7 +85,7 @@ public class CampPanel : MonoBehaviour
                 $"ATK +{gear.attack}\n" +
                 $"DEF +{gear.defense}\n" +
                 $"HP +{gear.maxHp}\n" +
-                $"Crit {ps.GetSubstat(GearSubstatType.CritRate):0.##}%  " +
+                $"Crit {ps.GetSubstat(GearSubstatType.CritChance):0.##}%  " +
                 $"Evasion {ps.GetSubstat(GearSubstatType.Evasion):0.##}%";
         }
     }

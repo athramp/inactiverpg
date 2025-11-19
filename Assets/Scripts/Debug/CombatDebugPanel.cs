@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Core.Combat;
 using TMPro;
+using Gameplay.Systems;
 
 public class CombatDebugPanel : MonoBehaviour
 {
@@ -47,6 +48,7 @@ public class CombatDebugPanel : MonoBehaviour
         {
             int xpInto = playerProgression.XpIntoLevel;
             int xpNext = playerProgression.XpToNextLevel;
+            PlayerCombatStats stats = orchestrator.CombatStats;
 
             string s = $"PLAYER\n" +
                        $"Lv {playerProgression.Level}\n";
@@ -57,7 +59,12 @@ public class CombatDebugPanel : MonoBehaviour
                      $"ATK {eng.Player.Atk}  DEF {eng.Player.Def}\n";
             }
 
-            s += $"XP {xpInto}/{xpNext}";
+            s += $"AA Spd {stats.attackSpeedAA * 100f:+0;-0;0}%  Crit {stats.critChanceAA * 100f:+0;-0;0}%\n" +
+                 $"Skill Crit {stats.skillCritChance * 100f:+0;-0;0}%  CritDmg {stats.skillCritDamage * 100f:+0;-0;0}%\n" +
+                 $"DOT {stats.dotDamagePct * 100f:+0;-0;0}%  Boss {stats.damageVsBossPct * 100f:+0;-0;0}%\n" +
+                 $"Thorns {stats.thornsPct * 100f:+0;-0;0}%  Regen {stats.regenPct * 100f:+0;-0;0}%\n" +
+                 $"Acc {stats.accuracyRating:0.##}  Eva {stats.evasionRating:0.##}";
+            s += $"\nXP {xpInto}/{xpNext}";
             playerText.text = s;
         }
     }

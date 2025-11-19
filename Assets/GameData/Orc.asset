@@ -16,7 +16,7 @@ MonoBehaviour:
   displayName: Orc
   tier: 0
   prefab: {fileID: 7165065568128235175, guid: 533fef513f957924e87c38e9bf59f838, type: 3}
-  hp: 130
+  hp: 1500
   atk: 12
   def: 6
   critChance: 0.06

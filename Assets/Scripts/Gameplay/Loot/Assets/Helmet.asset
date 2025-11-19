@@ -92,7 +92,7 @@ MonoBehaviour:
     m_PostInfinity: 2
     m_RotationOrder: 4
   rarityScaling:
-  - rarity: 1
+  - rarity: 0
     additiveBonus:
       attack: 10
       defense: 10

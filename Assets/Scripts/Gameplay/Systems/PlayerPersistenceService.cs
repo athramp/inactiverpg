@@ -209,12 +209,16 @@ public class PlayerPersistenceService : MonoBehaviour
     Dictionary<string, object> SerializeGear(GearInstance inst)
     {
         if (inst?.item == null) return null;
+        var stats = inst.TotalStats;
         var dict = new Dictionary<string, object>
         {
             ["id"] = inst.instanceId,
             ["item"] = inst.item.name,
             ["rarity"] = inst.rarity.ToString(),
-            ["level"] = inst.level
+            ["level"] = inst.level,
+            ["hp"] = stats.maxHp,
+            ["atk"] = stats.attack,
+            ["def"] = stats.defense
         };
         var subs = new List<Dictionary<string, object>>();
         if (inst.Substats != null)
@@ -243,13 +247,13 @@ public class PlayerPersistenceService : MonoBehaviour
             return null;
         }
         string id = dict.TryGetValue("id", out var idVal) ? idVal?.ToString() : null;
-        string rarityStr = dict.TryGetValue("rarity", out var rVal) ? rVal?.ToString() : GearRarity.Normal.ToString();
-        if (!System.Enum.TryParse(rarityStr, out GearRarity rarity)) rarity = GearRarity.Normal;
+        string rarityStr = dict.TryGetValue("rarity", out var rVal) ? rVal?.ToString() : GearRarity.Common.ToString();
+        if (!System.Enum.TryParse(rarityStr, out GearRarity rarity)) rarity = GearRarity.Common;
         int level = dict.TryGetValue("level", out var lvVal) ? System.Convert.ToInt32(lvVal) : 1;
         var substats = new List<GearSubstatRoll>();
-        if (dict.TryGetValue("substats", out var subsObj) && subsObj is object[] subsArr)
+        if (dict.TryGetValue("substats", out var subsObj))
         {
-            foreach (var entry in subsArr)
+            foreach (var entry in EnumerateArray(subsObj))
             {
                 if (entry is Dictionary<string, object> subDict)
                 {
@@ -260,7 +264,15 @@ public class PlayerPersistenceService : MonoBehaviour
                 }
             }
         }
-        return GearInstance.Restore(id, item, rarity, level, substats);
+
+        int hp = dict.TryGetValue("hp", out var hpVal) ? System.Convert.ToInt32(hpVal) : -1;
+        int atk = dict.TryGetValue("atk", out var atkVal) ? System.Convert.ToInt32(atkVal) : -1;
+        int def = dict.TryGetValue("def", out var defVal) ? System.Convert.ToInt32(defVal) : -1;
+        GearStatBlock? savedStats = (hp >= 0 && atk >= 0 && def >= 0)
+            ? new GearStatBlock { maxHp = hp, attack = atk, defense = def }
+            : (GearStatBlock?)null;
+
+        return GearInstance.Restore(id, item, rarity, level, substats, savedStats);
     }
 
     IEnumerable<object> EnumerateArray(object raw)

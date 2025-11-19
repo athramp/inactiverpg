@@ -77,7 +77,7 @@ namespace Gameplay.Loot
             if (total <= 0f) return null;
 
             float roll = UnityEngine.Random.Range(0f, total);
-            GearRarity rarity = GearRarity.Normal;
+            GearRarity rarity = GearRarity.Common;
             foreach (var entry in def.rarityTable)
             {
                 if (entry.requiresLevel > lampLevel) continue;

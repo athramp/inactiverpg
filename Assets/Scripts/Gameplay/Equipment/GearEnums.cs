@@ -15,26 +15,31 @@ namespace Gameplay.Equipment
 
     public enum GearRarity
     {
-        Normal,
-        Unique,
-        Well,
+        Common,
+        Uncommon,
         Rare,
-        Mythic,
         Epic,
         Legendary,
-        Immortal,
-        Supreme,
-        Aurous,
-        Eternal
+        Mythic,
+        Ancient,
+        Relic,
+        Exalted,
+        Celestial
     }
 
     public enum GearSubstatType
     {
-        CritRate,
-        ReflectDamage,
+        AttackSpeed,
+        CritChance,
+        SkillCritChance,
+        SkillCritDamage,
+        DotDamage,
+        BossDamage,
+        Thorns,
         Evasion,
-        StunChance,
-        SkillCritRate
+        Accuracy,
+        Regeneration,
+        ShieldPower
     }
 
     [Serializable]

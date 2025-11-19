@@ -16,17 +16,92 @@ MonoBehaviour:
   - rarity: 0
     substatCount: 1
   - rarity: 1
-    substatCount: 2
+    substatCount: 1
   substats:
   - type: 0
     allowDuplicates: 0
     rarityRanges:
     - rarity: 0
-      valuePercentRange: {x: 1, y: 2}
+      valuePercentRange: {x: 10, y: 20}
+      weight: 100
+    - rarity: 1
+      valuePercentRange: {x: 20, y: 30}
       weight: 50
   - type: 2
     allowDuplicates: 0
     rarityRanges:
     - rarity: 0
       valuePercentRange: {x: 1, y: 2}
+      weight: 50
+  - type: 1
+    allowDuplicates: 0
+    rarityRanges:
+    - rarity: 1
+      valuePercentRange: {x: 0.3, y: 0.6}
+      weight: 50
+    - rarity: 2
+      valuePercentRange: {x: 0.6, y: 1}
+      weight: 50
+    - rarity: 3
+      valuePercentRange: {x: 0.8, y: 1.2}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1, y: 1.5}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1.2, y: 1.6}
+      weight: 50
+  - type: 4
+    allowDuplicates: 0
+    rarityRanges:
+    - rarity: 1
+      valuePercentRange: {x: 0.3, y: 0.6}
+      weight: 50
+    - rarity: 2
+      valuePercentRange: {x: 0.6, y: 1}
+      weight: 50
+    - rarity: 3
+      valuePercentRange: {x: 0.8, y: 1.2}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1, y: 1.5}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1.2, y: 1.6}
+      weight: 50
+  - type: 1
+    allowDuplicates: 0
+    rarityRanges:
+    - rarity: 1
+      valuePercentRange: {x: 0.3, y: 0.6}
+      weight: 50
+    - rarity: 2
+      valuePercentRange: {x: 0.6, y: 1}
+      weight: 50
+    - rarity: 3
+      valuePercentRange: {x: 0.8, y: 1.2}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1, y: 1.5}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1.2, y: 1.6}
+      weight: 50
+  - type: 1
+    allowDuplicates: 0
+    rarityRanges:
+    - rarity: 1
+      valuePercentRange: {x: 0.3, y: 0.6}
+      weight: 50
+    - rarity: 2
+      valuePercentRange: {x: 0.6, y: 1}
+      weight: 50
+    - rarity: 3
+      valuePercentRange: {x: 0.8, y: 1.2}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1, y: 1.5}
+      weight: 50
+    - rarity: 4
+      valuePercentRange: {x: 1.2, y: 1.6}
       weight: 50

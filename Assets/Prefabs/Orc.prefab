@@ -306,5 +306,9 @@ MonoBehaviour:
     stunTimer: 0
     hpBar: {fileID: 0}
     enemyId: 0
+    lastX: 0
+    animSpeed: 0
+    animator: {fileID: 0}
+    deathStarted: 0
   melee: {fileID: 11400000, guid: 1b4157cfdba4568418f29c59f8f15510, type: 2}
   openerDelay: 0.25
